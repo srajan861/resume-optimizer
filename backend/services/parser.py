@@ -48,10 +48,22 @@ def _extract_pdf(content: bytes) -> str:
         text_parts = []
         with pdfplumber.open(io.BytesIO(content)) as pdf:
             for page in pdf.pages:
-                page_text = page.extract_text()
+                # Use layout-aware extraction to preserve spacing
+                page_text = page.extract_text(x_tolerance=3, y_tolerance=3)
                 if page_text:
                     text_parts.append(page_text)
         raw = "\n".join(text_parts).strip()
+
+        # Fix common PDF spacing issues: add space before capital letters
+        # that got merged (e.g. "DesignedandIntegrated" -> "Designed and Integrated")
+        import re as _re
+        # Fix missing spaces after punctuation
+        raw = _re.sub(r'([a-z])([A-Z])', r'\1 \2', raw)
+        # Fix merged words after commas with no space
+        raw = _re.sub(r',([^\s])', r', \1', raw)
+        # Fix multiple spaces
+        raw = _re.sub(r' {2,}', ' ', raw)
+
         if not raw:
             raise HTTPException(status_code=422, detail="PDF appears to be empty or image-based (no extractable text).")
         return raw

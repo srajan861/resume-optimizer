@@ -9,7 +9,7 @@ from models.schemas import RecruiterFeedback, RewrittenBullet
 
 GEMINI_API_URL = (
     "https://generativelanguage.googleapis.com/v1beta/models/"
-    "gemini-1.5-flash:generateContent"
+    "gemini-2.0-flash:generateContent"
 )
 
 ROLE_CONTEXT = {
@@ -119,6 +119,8 @@ You MUST respond with ONLY a valid JSON object. No explanation, no markdown, jus
             suggestions=data.get("suggestions", [])[:6],
         )
     except Exception as e:
+        # Log the actual error for debugging
+        print(f"❌ Gemini recruiter simulation failed: {type(e).__name__}: {e}")
         # Fallback response if AI fails
         return RecruiterFeedback(
             score=5.0,
