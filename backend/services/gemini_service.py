@@ -1,16 +1,9 @@
 import json
 import re
-import asyncio
 from typing import List
-import httpx
+from groq import Groq
 from core.config import settings
 from models.schemas import RecruiterFeedback, RewrittenBullet
-
-
-GEMINI_API_URL = (
-    "https://generativelanguage.googleapis.com/v1beta/models/"
-    "gemini-2.0-flash:generateContent"
-)
 
 ROLE_CONTEXT = {
     "sde": "Software Development Engineer (SDE) role focusing on system design, coding, and software architecture",
@@ -19,60 +12,26 @@ ROLE_CONTEXT = {
     "general": "general professional role",
 }
 
+MODEL = "llama-3.3-70b-versatile"
 
-async def _call_gemini(prompt: str, temperature: float = 0.3) -> str:
-    """Make an async call to the Gemini API."""
-    if not settings.GEMINI_API_KEY:
-        raise ValueError("GEMINI_API_KEY not configured")
-    
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {
-            "temperature": temperature,
-            "maxOutputTokens": 2048,
-            "topP": 0.8,
-        },
-    }
-    
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        resp = await client.post(
-            f"{GEMINI_API_URL}?key={settings.GEMINI_API_KEY}",
-            json=payload,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-    
-    candidates = data.get("candidates", [])
-    if not candidates:
-        raise ValueError("No response from Gemini API")
-    
-    content = candidates[0].get("content", {})
-    parts = content.get("parts", [])
-    if not parts:
-        raise ValueError("Empty response from Gemini API")
-    
-    return parts[0].get("text", "")
+
+def get_client() -> Groq:
+    return Groq(api_key=settings.GROQ_API_KEY)
 
 
 def _extract_json(text: str) -> dict:
     """Robustly extract JSON from LLM response."""
-    # Remove markdown code fences
     text = re.sub(r"```(?:json)?", "", text).strip("` \n")
-    
-    # Try direct parse
     try:
         return json.loads(text)
     except json.JSONDecodeError:
         pass
-    
-    # Try to find JSON object in text
     match = re.search(r"\{[\s\S]*\}", text)
     if match:
         try:
             return json.loads(match.group(0))
         except json.JSONDecodeError:
             pass
-    
     raise ValueError(f"Could not parse JSON from response: {text[:200]}")
 
 
@@ -81,9 +40,9 @@ async def simulate_recruiter(
     jd_text: str,
     role_type: str = "general",
 ) -> RecruiterFeedback:
-    """Use Gemini to simulate a senior recruiter evaluating the resume."""
+    """Use Groq to simulate a senior recruiter evaluating the resume."""
     role_desc = ROLE_CONTEXT.get(role_type, ROLE_CONTEXT["general"])
-    
+
     prompt = f"""You are a senior recruiter with 10+ years of experience hiring for {role_desc}.
 
 Evaluate the following resume against the job description provided.
@@ -96,7 +55,7 @@ Evaluate the following resume against the job description provided.
 
 Evaluate based on:
 1. Relevance to the job description
-2. Impact and measurability of achievements  
+2. Impact and measurability of achievements
 3. Technical depth and skill alignment
 4. Clarity, structure, and professionalism
 
@@ -109,9 +68,17 @@ You MUST respond with ONLY a valid JSON object. No explanation, no markdown, jus
 }}"""
 
     try:
-        raw = await _call_gemini(prompt, temperature=0.2)
+        client = get_client()
+        response = client.chat.completions.create(
+            model=MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.2,
+            max_tokens=1024,
+        )
+        raw = response.choices[0].message.content or ""
+        print(f"✅ Groq recruiter response received")
         data = _extract_json(raw)
-        
+
         return RecruiterFeedback(
             score=float(data.get("score", 5.0)),
             strengths=data.get("strengths", [])[:6],
@@ -119,9 +86,7 @@ You MUST respond with ONLY a valid JSON object. No explanation, no markdown, jus
             suggestions=data.get("suggestions", [])[:6],
         )
     except Exception as e:
-        # Log the actual error for debugging
-        print(f"❌ Gemini recruiter simulation failed: {type(e).__name__}: {e}")
-        # Fallback response if AI fails
+        print(f"❌ Groq recruiter simulation failed: {type(e).__name__}: {e}")
         return RecruiterFeedback(
             score=5.0,
             strengths=["Resume submitted for review"],
@@ -134,19 +99,18 @@ async def rewrite_bullet_points(
     bullets: List[str],
     job_context: str = "",
 ) -> List[RewrittenBullet]:
-    """Rewrite weak bullet points to be more impactful using Gemini."""
+    """Rewrite weak bullet points to be more impactful using Groq."""
     if not bullets:
         return []
-    
-    # Process in batches of 5 to avoid token limits
+
     results: List[RewrittenBullet] = []
     batch_size = 5
-    
+
     for i in range(0, len(bullets), batch_size):
         batch = bullets[i:i + batch_size]
         batch_results = await _rewrite_batch(batch, job_context)
         results.extend(batch_results)
-    
+
     return results
 
 
@@ -157,7 +121,7 @@ async def _rewrite_batch(
     """Rewrite a batch of bullet points."""
     numbered = "\n".join(f"{j+1}. {b}" for j, b in enumerate(bullets))
     context_note = f"\nTarget role context: {job_context}" if job_context else ""
-    
+
     prompt = f"""You are an expert resume writer and career coach.{context_note}
 
 Rewrite each bullet point below to be more impactful. Use:
@@ -178,19 +142,23 @@ Respond ONLY with valid JSON — no markdown, no explanation:
 }}"""
 
     try:
-        raw = await _call_gemini(prompt, temperature=0.4)
+        client = get_client()
+        response = client.chat.completions.create(
+            model=MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.4,
+            max_tokens=1024,
+        )
+        raw = response.choices[0].message.content or ""
         data = _extract_json(raw)
         rewrites = data.get("rewrites", [])
-        
+
         result = []
         for j, bullet in enumerate(bullets):
-            if j < len(rewrites):
-                improved = rewrites[j].get("improved", bullet)
-            else:
-                improved = bullet
+            improved = rewrites[j].get("improved", bullet) if j < len(rewrites) else bullet
             result.append(RewrittenBullet(original=bullet, improved=improved))
-        
+
         return result
-    except Exception:
-        # Fallback: return originals unchanged
+    except Exception as e:
+        print(f"❌ Groq rewrite failed: {type(e).__name__}: {e}")
         return [RewrittenBullet(original=b, improved=b) for b in bullets]
