@@ -81,7 +81,12 @@ export default function UploadPage() {
       })
 
       setStep('done')
-      nav(`/dashboard/results/${result.data.analysis_id}`, { state: { result: result.data } })
+      nav(`/dashboard/results/${result.data.analysis_id}`, {
+        state: {
+          result: result.data,
+          resumeText: uploaded.parsed_text,
+        }
+      })
     } catch (err: unknown) {
       setStep('error')
       setError(err instanceof Error ? err.message : 'Analysis failed. Please try again.')
