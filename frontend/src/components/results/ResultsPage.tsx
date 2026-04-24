@@ -4,12 +4,11 @@ import { useAuth } from '../../hooks/useAuth'
 import { getAnalysis } from '../../services/api'
 import type { AnalysisResult } from '../../types'
 import ScoreRing from '../ui/ScoreRing'
-import ResumePreview from '../ui/ResumePreview'
 import { downloadAnalysisPDF } from '../../services/pdfExport'
 import {
   CheckCircle2, XCircle, Lightbulb, ArrowLeft,
   TrendingUp, AlertTriangle, Sparkles, ChevronDown, ChevronUp,
-  Download, FileText,
+  Download,
 } from 'lucide-react'
 
 function ATSBar({ score }: { score: number }) {
@@ -263,17 +262,6 @@ export default function ResultsPage() {
         </div>
       )}
 
-      {/* Resume Preview with highlights */}
-      {resumeText && (
-        <div id="resume-preview" className="mt-6 animate-fade-up" style={{ animationDelay: '0.3s' }}>
-          <ResumePreview
-            resumeText={resumeText}
-            matchedKeywords={ats.matched_keywords}
-            missingKeywords={ats.missing_keywords}
-          />
-        </div>
-      )}
-
       {/* CTA */}
       <div className="mt-10 flex gap-4 flex-wrap">
         <button
@@ -282,15 +270,6 @@ export default function ResultsPage() {
         >
           <TrendingUp size={16} />
           Analyze Another Resume
-        </button>
-        <button
-          onClick={() => {
-            document.getElementById('resume-preview')?.scrollIntoView({ behavior: 'smooth' })
-          }}
-          className="btn-ghost flex items-center gap-2"
-        >
-          <FileText size={15} />
-          Preview Changes
         </button>
         <button
           onClick={() => downloadAnalysisPDF(data)}
