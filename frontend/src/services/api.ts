@@ -80,3 +80,14 @@ export async function getUserHistory(
   )
   return handleResponse<HistoryResponse>(res)
 }
+
+export async function deleteAnalysis(
+  analysisId: string,
+  userId: string
+): Promise<void> {
+  const res = await fetch(
+    `${BASE_URL}/history/${analysisId}?user_id=${userId}`,
+    { method: 'DELETE' }
+  )
+  return handleResponse<void>(res)
+}

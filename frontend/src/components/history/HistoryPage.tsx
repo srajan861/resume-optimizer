@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
-import { getUserHistory } from '../../services/api'
+import { getUserHistory, deleteAnalysis } from '../../services/api'
 import type { HistoryItem } from '../../types'
-import { Clock, ChevronRight, BarChart2, TrendingUp, FileText } from 'lucide-react'
+import { Clock, ChevronRight, BarChart2, TrendingUp, FileText, Trash2 } from 'lucide-react'
 
 function ScoreBadge({ score, max }: { score: number; max: number }) {
   const pct = (score / max) * 100
@@ -22,6 +22,8 @@ export default function HistoryPage() {
   const nav = useNavigate()
   const [items, setItems] = useState<HistoryItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [confirmId, setConfirmId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!user) return
@@ -30,6 +32,20 @@ export default function HistoryPage() {
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [user])
+
+  const handleDelete = async (analysisId: string) => {
+    if (!user) return
+    setDeletingId(analysisId)
+    try {
+      await deleteAnalysis(analysisId, user.id)
+      setItems(prev => prev.filter(i => i.analysis_id !== analysisId))
+    } catch (err) {
+      console.error('Delete failed:', err)
+    } finally {
+      setDeletingId(null)
+      setConfirmId(null)
+    }
+  }
 
   if (loading) {
     return (
@@ -63,19 +79,24 @@ export default function HistoryPage() {
       ) : (
         <div className="space-y-3">
           {items.map((item, i) => (
-            <button
+            <div
               key={item.analysis_id}
-              onClick={() => nav(`/dashboard/results/${item.analysis_id}`)}
-              className="w-full glass-hover rounded-xl p-5 text-left flex items-start gap-4 animate-fade-up group"
+              className="glass-hover rounded-xl p-5 flex items-start gap-4 animate-fade-up group relative"
               style={{ animationDelay: `${i * 0.06}s`, opacity: 0 }}
             >
               {/* Icon */}
-              <div className="w-10 h-10 rounded-lg bg-ink-700 border border-ink-600 flex items-center justify-center shrink-0 mt-0.5 group-hover:border-acid/30 transition-colors">
+              <div
+                className="w-10 h-10 rounded-lg bg-ink-700 border border-ink-600 flex items-center justify-center shrink-0 mt-0.5 cursor-pointer group-hover:border-acid/30 transition-colors"
+                onClick={() => nav(`/dashboard/results/${item.analysis_id}`)}
+              >
                 <BarChart2 size={16} className="text-ink-400 group-hover:text-acid transition-colors" />
               </div>
 
               {/* Content */}
-              <div className="flex-1 min-w-0">
+              <div
+                className="flex-1 min-w-0 cursor-pointer"
+                onClick={() => nav(`/dashboard/results/${item.analysis_id}`)}
+              >
                 <p className="text-ink-200 text-sm mb-2 line-clamp-2 leading-relaxed">
                   {item.jd_preview || 'Job description not available'}
                 </p>
@@ -94,8 +115,43 @@ export default function HistoryPage() {
                 </div>
               </div>
 
-              <ChevronRight size={14} className="text-ink-600 group-hover:text-acid mt-3 shrink-0 transition-colors" />
-            </button>
+              {/* Actions */}
+              <div className="flex items-center gap-2 shrink-0">
+                <ChevronRight
+                  size={14}
+                  className="text-ink-600 group-hover:text-acid mt-1 transition-colors cursor-pointer"
+                  onClick={() => nav(`/dashboard/results/${item.analysis_id}`)}
+                />
+
+                {/* Delete */}
+                {confirmId === item.analysis_id ? (
+                  <div className="flex items-center gap-2 bg-coral/10 border border-coral/20 rounded-lg px-3 py-1.5">
+                    <span className="text-xs text-coral font-mono">Delete?</span>
+                    <button
+                      onClick={() => handleDelete(item.analysis_id)}
+                      disabled={deletingId === item.analysis_id}
+                      className="text-xs text-coral font-bold hover:text-white transition-colors"
+                    >
+                      {deletingId === item.analysis_id ? '...' : 'Yes'}
+                    </button>
+                    <button
+                      onClick={() => setConfirmId(null)}
+                      className="text-xs text-ink-400 hover:text-ink-200 transition-colors"
+                    >
+                      No
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setConfirmId(item.analysis_id) }}
+                    className="opacity-0 group-hover:opacity-100 transition-all p-1.5 rounded-lg hover:bg-coral/10 hover:text-coral text-ink-600"
+                    title="Delete analysis"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
+              </div>
+            </div>
           ))}
         </div>
       )}

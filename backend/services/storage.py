@@ -177,3 +177,30 @@ async def get_user_history(user_id: str, limit: int = 20) -> List[dict]:
         return result.data or []
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch history: {str(e)}")
+
+
+async def delete_analysis(analysis_id: str, user_id: str) -> bool:
+    """Delete an analysis and its associated feedback."""
+    supabase = get_supabase()
+    
+    try:
+        # Verify ownership first
+        check = (
+            supabase.table("analyses")
+            .select("id")
+            .eq("id", analysis_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        if not check.data:
+            return False
+        
+        # Delete feedback first (foreign key constraint)
+        supabase.table("feedback").delete().eq("analysis_id", analysis_id).execute()
+        
+        # Delete analysis
+        supabase.table("analyses").delete().eq("id", analysis_id).eq("user_id", user_id).execute()
+        
+        return True
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete analysis: {str(e)}")

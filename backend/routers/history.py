@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Query
 from models.schemas import HistoryResponse, HistoryItem
-from services.storage import get_user_history
+from services.storage import get_user_history, delete_analysis
+from fastapi import HTTPException
 
 router = APIRouter()
 
@@ -29,3 +30,15 @@ async def get_history(
         ))
     
     return HistoryResponse(items=items, total=len(items))
+
+
+@router.delete("/history/{analysis_id}")
+async def delete_history_item(
+    analysis_id: str,
+    user_id: str = Query(...),
+):
+    """Delete a specific analysis by ID."""
+    success = await delete_analysis(analysis_id, user_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+    return {"success": True, "message": "Analysis deleted successfully"}
