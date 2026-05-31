@@ -6,6 +6,7 @@ import type { AnalysisResult } from '../../types'
 import ScoreRing from '../ui/ScoreRing'
 import CoverLetterCard from './CoverLetterCard'
 import JDIntelligenceCard from './JDIntelligenceCard'
+import SkillGapCard from './SkillGapCard'
 import { downloadAnalysisPDF } from '../../services/pdfExport'
 import {
   CheckCircle2, XCircle, Lightbulb, ArrowLeft,
@@ -282,6 +283,9 @@ export default function ResultsPage() {
           )}
         </div>
       )}
+
+      {/* Skill Gap Roadmap */}
+      {analysisId && <SkillGapCard analysisId={analysisId} />}
 
       {/* Cover Letter Generator */}
       {analysisId && <CoverLetterCard analysisId={analysisId} />}

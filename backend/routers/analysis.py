@@ -4,12 +4,13 @@ from models.schemas import (
     AnalyzeRequest, AnalysisResponse, AnalysisResult,
     RewriteRequest, RewriteResponse,
     CoverLetterRequest, CoverLetterResponse,
+    SkillGapRequest, SkillGapResponse,
     ATSResult, RecruiterFeedback,
 )
 from services.ats_engine import compute_ats_score
 from services.gemini_service import (
     simulate_recruiter, rewrite_bullet_points, generate_cover_letter,
-    extract_jd_intelligence,
+    extract_jd_intelligence, generate_skill_gap_roadmap,
 )
 from services.parser import parse_resume_sections
 from services.storage import get_resume_text, save_analysis, get_analysis_by_id
@@ -129,6 +130,45 @@ async def create_cover_letter(req: CoverLetterRequest):
         )
 
     return CoverLetterResponse(cover_letter=letter, tone=req.tone or "professional")
+
+
+@router.post("/skill-gap", response_model=SkillGapResponse)
+async def create_skill_gap_roadmap(req: SkillGapRequest):
+    """Generate a skill-gap learning roadmap from a stored analysis."""
+    result = await get_analysis_by_id(req.analysis_id, req.user_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+
+    analysis = result["analysis"]
+    feedback = result["feedback"]
+    resume_text = (analysis.get("resumes") or {}).get("parsed_text", "")
+    jd_text = (analysis.get("job_descriptions") or {}).get("content", "")
+
+    if not resume_text or not jd_text:
+        raise HTTPException(
+            status_code=422,
+            detail="Could not load resume or job description for this analysis.",
+        )
+
+    # Reuse stored JD intelligence (from the analyze step) as the requirement checklist
+    jd_intel = feedback.get("jd_intelligence") or {}
+    required_skills = jd_intel.get("required_skills", []) if isinstance(jd_intel, dict) else []
+    nice_skills = jd_intel.get("nice_to_have_skills", []) if isinstance(jd_intel, dict) else []
+
+    try:
+        roadmap = await generate_skill_gap_roadmap(
+            resume_text=resume_text,
+            jd_text=jd_text,
+            required_skills=required_skills,
+            nice_to_have_skills=nice_skills,
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=502,
+            detail="Skill gap roadmap generation failed. Please try again.",
+        )
+
+    return SkillGapResponse(roadmap=roadmap)
 
 
 @router.get("/analysis/{analysis_id}")

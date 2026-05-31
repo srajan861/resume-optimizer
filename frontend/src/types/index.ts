@@ -82,6 +82,29 @@ export interface CoverLetterResponse {
   tone: CoverLetterTone
 }
 
+// ── Skill Gap Roadmap ─────────────────────────────────────────────────────────
+
+export type SkillPriority = 'high' | 'medium' | 'low'
+
+export interface SkillGapItem {
+  skill: string
+  priority: SkillPriority
+  reason: string
+  learning_path: string[]
+  estimated_time: string
+}
+
+export interface SkillGapRoadmap {
+  summary: string
+  readiness_score: number
+  matched_skills: string[]
+  missing_skills: SkillGapItem[]
+}
+
+export interface SkillGapResponse {
+  roadmap: SkillGapRoadmap
+}
+
 export interface AnalyzeFormState {
   resumeId: string | null
   jobDescription: string

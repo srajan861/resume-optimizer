@@ -3,7 +3,10 @@ import re
 from typing import List
 from groq import Groq
 from core.config import settings
-from models.schemas import RecruiterFeedback, RewrittenBullet, JDIntelligence
+from models.schemas import (
+    RecruiterFeedback, RewrittenBullet, JDIntelligence,
+    SkillGapRoadmap, SkillGapItem,
+)
 ROLE_CONTEXT = {
     "sde": "Software Development Engineer (SDE) role focusing on system design, coding, and software architecture",
     "ml": "Machine Learning Engineer role focusing on ML systems, model development, and data pipelines",
@@ -343,3 +346,97 @@ Respond with ONLY a valid JSON object. No markdown, no explanation, just raw JSO
             key_responsibilities=[],
             education="",
         )
+
+
+# ── Skill Gap Roadmap ────────────────────────────────────────────────────────
+
+async def generate_skill_gap_roadmap(
+    resume_text: str,
+    jd_text: str,
+    required_skills: Optional[List[str]] = None,
+    nice_to_have_skills: Optional[List[str]] = None,
+) -> SkillGapRoadmap:
+    """Compare a resume against a job's requirements and build a learning roadmap."""
+    req_skills = required_skills or []
+    nice_skills = nice_to_have_skills or []
+
+    skills_hint = ""
+    if req_skills or nice_skills:
+        skills_hint = (
+            f"\nThe job's REQUIRED skills are: {', '.join(req_skills) or 'n/a'}.\n"
+            f"The NICE-TO-HAVE skills are: {', '.join(nice_skills) or 'n/a'}.\n"
+            "Use these as the primary checklist when finding gaps."
+        )
+
+    prompt = f"""You are a senior career coach and technical mentor.
+
+Compare the candidate's resume against the target job and produce a concrete skill-gap roadmap.
+Identify which required skills the candidate already demonstrates, and which are missing or weak.
+For each missing skill, give a realistic, ordered learning path (concrete steps/resources types,
+not brand names), a priority, a one-line reason it matters for THIS role, and a rough time estimate.
+{skills_hint}
+
+## JOB DESCRIPTION:
+{jd_text[:2500]}
+
+## CANDIDATE RESUME:
+{resume_text[:2500]}
+
+Respond with ONLY a valid JSON object. No markdown, no explanation, just raw JSON:
+{{
+  "summary": "<2-3 sentence honest assessment of how ready the candidate is for this role>",
+  "readiness_score": <integer 0-100 representing how well-prepared the candidate currently is>,
+  "matched_skills": [<skills from the JD the candidate already clearly has>],
+  "missing_skills": [
+    {{
+      "skill": "<skill name>",
+      "priority": "<high|medium|low>",
+      "reason": "<why this matters for this specific role, one sentence>",
+      "learning_path": [<3-4 ordered, concrete steps to learn it>],
+      "estimated_time": "<e.g. '2-3 weeks', '1 month'>"
+    }}
+  ]
+}}"""
+
+    try:
+        client = get_client()
+        response = client.chat.completions.create(
+            model=MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+            max_tokens=1600,
+        )
+        raw = response.choices[0].message.content or ""
+        print("✅ Groq skill gap roadmap generated")
+        data = _extract_json(raw)
+
+        missing_items: List[SkillGapItem] = []
+        for item in data.get("missing_skills", [])[:10]:
+            if not isinstance(item, dict):
+                continue
+            priority = str(item.get("priority", "medium")).lower().strip()
+            if priority not in ("high", "medium", "low"):
+                priority = "medium"
+            missing_items.append(SkillGapItem(
+                skill=str(item.get("skill", "")).strip(),
+                priority=priority,
+                reason=str(item.get("reason", "")).strip(),
+                learning_path=[str(s).strip() for s in item.get("learning_path", [])][:5],
+                estimated_time=str(item.get("estimated_time", "")).strip(),
+            ))
+
+        try:
+            readiness = int(round(float(data.get("readiness_score", 0))))
+        except (TypeError, ValueError):
+            readiness = 0
+        readiness = max(0, min(100, readiness))
+
+        return SkillGapRoadmap(
+            summary=str(data.get("summary", "")).strip(),
+            readiness_score=readiness,
+            matched_skills=[str(s).strip() for s in data.get("matched_skills", [])][:20],
+            missing_skills=missing_items,
+        )
+    except Exception as e:
+        print(f"❌ Groq skill gap roadmap failed: {type(e).__name__}: {e}")
+        raise

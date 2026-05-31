@@ -109,6 +109,32 @@ class CoverLetterResponse(BaseModel):
     tone: str
 
 
+# ── Skill Gap Roadmap ────────────────────────────────────────────────────────
+
+class SkillGapRequest(BaseModel):
+    analysis_id: str
+    user_id: str
+
+
+class SkillGapItem(BaseModel):
+    skill: str
+    priority: str = "medium"  # high | medium | low
+    reason: str = ""
+    learning_path: List[str] = []
+    estimated_time: str = ""
+
+
+class SkillGapRoadmap(BaseModel):
+    summary: str = ""
+    readiness_score: int = 0  # 0-100
+    matched_skills: List[str] = []
+    missing_skills: List[SkillGapItem] = []
+
+
+class SkillGapResponse(BaseModel):
+    roadmap: SkillGapRoadmap
+
+
 # ── History ──────────────────────────────────────────────────────────────────
 
 class HistoryItem(BaseModel):

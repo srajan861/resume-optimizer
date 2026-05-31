@@ -6,6 +6,7 @@ import type {
   PersonaType,
   CoverLetterTone,
   CoverLetterResponse,
+  SkillGapResponse,
 } from '../types'
 
 const BASE_URL = import.meta.env.VITE_API_URL || '/api'
@@ -97,6 +98,23 @@ export async function generateCoverLetter(params: {
     }),
   })
   return handleResponse<CoverLetterResponse>(res)
+}
+
+// ── Skill Gap Roadmap ───────────────────────────────────────────────────────
+
+export async function generateSkillGapRoadmap(params: {
+  analysisId: string
+  userId: string
+}): Promise<SkillGapResponse> {
+  const res = await fetch(`${BASE_URL}/skill-gap`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      analysis_id: params.analysisId,
+      user_id: params.userId,
+    }),
+  })
+  return handleResponse<SkillGapResponse>(res)
 }
 
 // ── History ───────────────────────────────────────────────────────────────────
