@@ -3,10 +3,16 @@ from fastapi import APIRouter, HTTPException
 from models.schemas import (
     AnalyzeRequest, AnalysisResponse, AnalysisResult,
     RewriteRequest, RewriteResponse,
+    CoverLetterRequest, CoverLetterResponse,
+    SkillGapRequest, SkillGapResponse,
+    LiveFeedbackRequest, LiveFeedbackResponse,
     ATSResult, RecruiterFeedback,
 )
-from services.ats_engine import compute_ats_score
-from services.gemini_service import simulate_recruiter, rewrite_bullet_points
+from services.ats_engine import compute_ats_score, compute_live_feedback
+from services.gemini_service import (
+    simulate_recruiter, rewrite_bullet_points, generate_cover_letter,
+    extract_jd_intelligence, generate_skill_gap_roadmap, analyze_strength_breakdown,
+)
 from services.parser import parse_resume_sections
 from services.storage import get_resume_text, save_analysis, get_analysis_by_id
 from datetime import datetime
@@ -35,10 +41,23 @@ async def analyze_resume(req: AnalyzeRequest):
         asyncio.to_thread(compute_ats_score, resume_text, req.job_description)
     )
     recruiter_task = asyncio.create_task(
-        simulate_recruiter(resume_text, req.job_description, req.role_type or "general")
+        simulate_recruiter(
+            resume_text,
+            req.job_description,
+            req.role_type or "general",
+            req.persona or "standard",
+        )
     )
-    
-    ats_result, recruiter_feedback = await asyncio.gather(ats_task, recruiter_task)
+    jd_intel_task = asyncio.create_task(
+        extract_jd_intelligence(req.job_description)
+    )
+    strength_task = asyncio.create_task(
+        analyze_strength_breakdown(resume_text, req.job_description)
+    )
+
+    ats_result, recruiter_feedback, jd_intelligence, strength_breakdown = await asyncio.gather(
+        ats_task, recruiter_task, jd_intel_task, strength_task
+    )
     
     # Rewrite top bullet points
     bullets_to_rewrite = parsed.bullet_points[:8]  # Top 8 bullets
@@ -54,6 +73,8 @@ async def analyze_resume(req: AnalyzeRequest):
         ats_data=ats_result.model_dump(),
         recruiter_data=recruiter_feedback.model_dump(),
         rewritten_bullets=[r.model_dump() for r in rewritten],
+        jd_intelligence=jd_intelligence.model_dump(),
+        strength_breakdown=strength_breakdown.model_dump(),
     )
     
     return AnalysisResponse(
@@ -62,6 +83,8 @@ async def analyze_resume(req: AnalyzeRequest):
             ats=ats_result,
             recruiter=recruiter_feedback,
             rewritten_bullets=rewritten,
+            jd_intelligence=jd_intelligence,
+            strength_breakdown=strength_breakdown,
             created_at=datetime.utcnow().isoformat(),
         )
     )
@@ -78,6 +101,91 @@ async def rewrite_bullets(req: RewriteRequest):
     
     rewritten = await rewrite_bullet_points(req.bullet_points, req.job_context or "")
     return RewriteResponse(rewritten=rewritten)
+
+
+@router.post("/live-feedback", response_model=LiveFeedbackResponse)
+async def live_feedback(req: LiveFeedbackRequest):
+    """
+    Instant, LLM-free scoring for the real-time resume editor.
+    Runs keyword matching + local heuristics — safe to call on every keystroke.
+    """
+    return await asyncio.to_thread(
+        compute_live_feedback, req.resume_text, req.job_description
+    )
+
+
+@router.post("/cover-letter", response_model=CoverLetterResponse)
+async def create_cover_letter(req: CoverLetterRequest):
+    """Generate a tailored cover letter from a stored analysis (resume + job description)."""
+    result = await get_analysis_by_id(req.analysis_id, req.user_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+
+    analysis = result["analysis"]
+    resume_text = (analysis.get("resumes") or {}).get("parsed_text", "")
+    jd_text = (analysis.get("job_descriptions") or {}).get("content", "")
+
+    if not resume_text or not jd_text:
+        raise HTTPException(
+            status_code=422,
+            detail="Could not load resume or job description for this analysis.",
+        )
+
+    try:
+        letter = await generate_cover_letter(
+            resume_text=resume_text,
+            jd_text=jd_text,
+            tone=req.tone or "professional",
+            applicant_name=req.applicant_name or "",
+            company_name=req.company_name or "",
+            role_title=req.role_title or "",
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=502,
+            detail="Cover letter generation failed. Please try again.",
+        )
+
+    return CoverLetterResponse(cover_letter=letter, tone=req.tone or "professional")
+
+
+@router.post("/skill-gap", response_model=SkillGapResponse)
+async def create_skill_gap_roadmap(req: SkillGapRequest):
+    """Generate a skill-gap learning roadmap from a stored analysis."""
+    result = await get_analysis_by_id(req.analysis_id, req.user_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+
+    analysis = result["analysis"]
+    feedback = result["feedback"]
+    resume_text = (analysis.get("resumes") or {}).get("parsed_text", "")
+    jd_text = (analysis.get("job_descriptions") or {}).get("content", "")
+
+    if not resume_text or not jd_text:
+        raise HTTPException(
+            status_code=422,
+            detail="Could not load resume or job description for this analysis.",
+        )
+
+    # Reuse stored JD intelligence (from the analyze step) as the requirement checklist
+    jd_intel = feedback.get("jd_intelligence") or {}
+    required_skills = jd_intel.get("required_skills", []) if isinstance(jd_intel, dict) else []
+    nice_skills = jd_intel.get("nice_to_have_skills", []) if isinstance(jd_intel, dict) else []
+
+    try:
+        roadmap = await generate_skill_gap_roadmap(
+            resume_text=resume_text,
+            jd_text=jd_text,
+            required_skills=required_skills,
+            nice_to_have_skills=nice_skills,
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=502,
+            detail="Skill gap roadmap generation failed. Please try again.",
+        )
+
+    return SkillGapResponse(roadmap=roadmap)
 
 
 @router.get("/analysis/{analysis_id}")
@@ -106,7 +214,10 @@ async def get_analysis(analysis_id: str, user_id: str):
             "strengths": feedback.get("strengths", []),
             "weaknesses": feedback.get("weaknesses", []),
             "suggestions": feedback.get("suggestions", []),
+            "persona": feedback.get("persona", "standard"),
         },
         "rewritten_bullets": feedback.get("rewritten_points", []),
+        "jd_intelligence": feedback.get("jd_intelligence") or None,
+        "strength_breakdown": feedback.get("strength_breakdown") or None,
         "created_at": analysis.get("created_at", ""),
     }

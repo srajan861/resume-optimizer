@@ -13,6 +13,7 @@ export interface RecruiterFeedback {
   strengths: string[]
   weaknesses: string[]
   suggestions: string[]
+  persona?: PersonaType
 }
 
 export interface RewrittenBullet {
@@ -20,11 +21,37 @@ export interface RewrittenBullet {
   improved: string
 }
 
+export interface JDIntelligence {
+  role_summary: string
+  required_skills: string[]
+  nice_to_have_skills: string[]
+  experience_level: string
+  key_responsibilities: string[]
+  education: string
+}
+
+export interface StrengthMetric {
+  score: number
+  rationale: string
+}
+
+export interface StrengthBreakdown {
+  skill_match: StrengthMetric
+  experience_relevance: StrengthMetric
+  project_depth: StrengthMetric
+  keyword_coverage: StrengthMetric
+  impact_score: StrengthMetric
+  structure_score: StrengthMetric
+  overall: number
+}
+
 export interface AnalysisResult {
   analysis_id: string
   ats: ATSResult
   recruiter: RecruiterFeedback
   rewritten_bullets: RewrittenBullet[]
+  jd_intelligence?: JDIntelligence | null
+  strength_breakdown?: StrengthBreakdown | null
   created_at: string
 }
 
@@ -62,10 +89,63 @@ export interface HistoryResponse {
 
 export type RoleType = 'general' | 'sde' | 'ml' | 'analyst'
 
+export type PersonaType = 'standard' | 'faang' | 'startup' | 'hr'
+
+export type CoverLetterTone = 'professional' | 'enthusiastic' | 'concise'
+
+export interface CoverLetterResponse {
+  cover_letter: string
+  tone: CoverLetterTone
+}
+
+// ── Skill Gap Roadmap ─────────────────────────────────────────────────────────
+
+export type SkillPriority = 'high' | 'medium' | 'low'
+
+export interface SkillGapItem {
+  skill: string
+  priority: SkillPriority
+  reason: string
+  learning_path: string[]
+  estimated_time: string
+}
+
+export interface SkillGapRoadmap {
+  summary: string
+  readiness_score: number
+  matched_skills: string[]
+  missing_skills: SkillGapItem[]
+}
+
+export interface SkillGapResponse {
+  roadmap: SkillGapRoadmap
+}
+
+// ── Live Feedback (Real-Time Editing) ─────────────────────────────────────────
+
+export type LiveTipType = 'good' | 'warning' | 'info'
+
+export interface LiveTip {
+  type: LiveTipType
+  message: string
+}
+
+export interface LiveFeedbackResponse {
+  overall_score: number
+  ats_score: number
+  impact_score: number
+  structure_score: number
+  matched_keywords: string[]
+  missing_keywords: string[]
+  word_count: number
+  tips: LiveTip[]
+}
+
 export interface AnalyzeFormState {
   resumeId: string | null
   jobDescription: string
   roleType: RoleType
+  persona: PersonaType
   file: File | null
 }
 

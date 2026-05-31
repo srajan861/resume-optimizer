@@ -3,6 +3,11 @@ import type {
   AnalysisResponse,
   HistoryResponse,
   RoleType,
+  PersonaType,
+  CoverLetterTone,
+  CoverLetterResponse,
+  SkillGapResponse,
+  LiveFeedbackResponse,
 } from '../types'
 
 const BASE_URL = import.meta.env.VITE_API_URL || '/api'
@@ -45,6 +50,7 @@ export async function analyzeResume(params: {
   jobDescription: string
   userId: string
   roleType: RoleType
+  persona: PersonaType
 }): Promise<AnalysisResponse> {
   const res = await fetch(`${BASE_URL}/analyze`, {
     method: 'POST',
@@ -54,6 +60,7 @@ export async function analyzeResume(params: {
       job_description: params.jobDescription,
       user_id: params.userId,
       role_type: params.roleType,
+      persona: params.persona,
     }),
   })
   return handleResponse<AnalysisResponse>(res)
@@ -67,6 +74,66 @@ export async function getAnalysis(
     `${BASE_URL}/analysis/${analysisId}?user_id=${userId}`
   )
   return handleResponse<AnalysisResponse['data']>(res)
+}
+
+// ── Cover Letter ────────────────────────────────────────────────────────────
+
+export async function generateCoverLetter(params: {
+  analysisId: string
+  userId: string
+  tone: CoverLetterTone
+  applicantName?: string
+  companyName?: string
+  roleTitle?: string
+}): Promise<CoverLetterResponse> {
+  const res = await fetch(`${BASE_URL}/cover-letter`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      analysis_id: params.analysisId,
+      user_id: params.userId,
+      tone: params.tone,
+      applicant_name: params.applicantName ?? '',
+      company_name: params.companyName ?? '',
+      role_title: params.roleTitle ?? '',
+    }),
+  })
+  return handleResponse<CoverLetterResponse>(res)
+}
+
+// ── Skill Gap Roadmap ───────────────────────────────────────────────────────
+
+export async function generateSkillGapRoadmap(params: {
+  analysisId: string
+  userId: string
+}): Promise<SkillGapResponse> {
+  const res = await fetch(`${BASE_URL}/skill-gap`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      analysis_id: params.analysisId,
+      user_id: params.userId,
+    }),
+  })
+  return handleResponse<SkillGapResponse>(res)
+}
+
+// ── Live Feedback ───────────────────────────────────────────────────────────
+
+export async function getLiveFeedback(
+  params: { resumeText: string; jobDescription: string },
+  signal?: AbortSignal
+): Promise<LiveFeedbackResponse> {
+  const res = await fetch(`${BASE_URL}/live-feedback`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      resume_text: params.resumeText,
+      job_description: params.jobDescription,
+    }),
+    signal,
+  })
+  return handleResponse<LiveFeedbackResponse>(res)
 }
 
 // ── History ───────────────────────────────────────────────────────────────────

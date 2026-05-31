@@ -35,6 +35,7 @@ class AnalyzeRequest(BaseModel):
     job_description: str
     user_id: str
     role_type: Optional[str] = "general"  # sde | ml | analyst | general
+    persona: Optional[str] = "standard"  # standard | faang | startup | hr
 
 
 class ATSResult(BaseModel):
@@ -50,6 +51,31 @@ class RecruiterFeedback(BaseModel):
     strengths: List[str]
     weaknesses: List[str]
     suggestions: List[str]
+    persona: Optional[str] = "standard"
+
+
+class JDIntelligence(BaseModel):
+    role_summary: str = ""
+    required_skills: List[str] = []
+    nice_to_have_skills: List[str] = []
+    experience_level: str = ""
+    key_responsibilities: List[str] = []
+    education: str = ""
+
+
+class StrengthMetric(BaseModel):
+    score: int = Field(0, ge=0, le=100)
+    rationale: str = ""
+
+
+class StrengthBreakdown(BaseModel):
+    skill_match: StrengthMetric = StrengthMetric()
+    experience_relevance: StrengthMetric = StrengthMetric()
+    project_depth: StrengthMetric = StrengthMetric()
+    keyword_coverage: StrengthMetric = StrengthMetric()
+    impact_score: StrengthMetric = StrengthMetric()
+    structure_score: StrengthMetric = StrengthMetric()
+    overall: int = Field(0, ge=0, le=100)
 
 
 class RewrittenBullet(BaseModel):
@@ -62,6 +88,8 @@ class AnalysisResult(BaseModel):
     ats: ATSResult
     recruiter: RecruiterFeedback
     rewritten_bullets: List[RewrittenBullet]
+    jd_intelligence: Optional[JDIntelligence] = None
+    strength_breakdown: Optional[StrengthBreakdown] = None
     created_at: str
 
 
@@ -79,6 +107,71 @@ class RewriteRequest(BaseModel):
 
 class RewriteResponse(BaseModel):
     rewritten: List[RewrittenBullet]
+
+
+# ── Live Feedback (Real-Time Editing) ────────────────────────────────────────
+
+class LiveFeedbackRequest(BaseModel):
+    resume_text: str = ""
+    job_description: str = ""
+
+
+class LiveTip(BaseModel):
+    type: str = "info"  # good | warning | info
+    message: str
+
+
+class LiveFeedbackResponse(BaseModel):
+    overall_score: int = Field(0, ge=0, le=100)
+    ats_score: float = Field(0, ge=0, le=100)
+    impact_score: int = Field(0, ge=0, le=100)
+    structure_score: int = Field(0, ge=0, le=100)
+    matched_keywords: List[str] = []
+    missing_keywords: List[str] = []
+    word_count: int = 0
+    tips: List[LiveTip] = []
+
+
+# ── Cover Letter ─────────────────────────────────────────────────────────────
+
+class CoverLetterRequest(BaseModel):
+    analysis_id: str
+    user_id: str
+    tone: Optional[str] = "professional"  # professional | enthusiastic | concise
+    applicant_name: Optional[str] = ""
+    company_name: Optional[str] = ""
+    role_title: Optional[str] = ""
+
+
+class CoverLetterResponse(BaseModel):
+    cover_letter: str
+    tone: str
+
+
+# ── Skill Gap Roadmap ────────────────────────────────────────────────────────
+
+class SkillGapRequest(BaseModel):
+    analysis_id: str
+    user_id: str
+
+
+class SkillGapItem(BaseModel):
+    skill: str
+    priority: str = "medium"  # high | medium | low
+    reason: str = ""
+    learning_path: List[str] = []
+    estimated_time: str = ""
+
+
+class SkillGapRoadmap(BaseModel):
+    summary: str = ""
+    readiness_score: int = 0  # 0-100
+    matched_skills: List[str] = []
+    missing_skills: List[SkillGapItem] = []
+
+
+class SkillGapResponse(BaseModel):
+    roadmap: SkillGapRoadmap
 
 
 # ── History ──────────────────────────────────────────────────────────────────
@@ -104,4 +197,6 @@ class AnalysisDetailResponse(BaseModel):
     ats: ATSResult
     recruiter: RecruiterFeedback
     rewritten_bullets: List[RewrittenBullet]
+    jd_intelligence: Optional[JDIntelligence] = None
+    strength_breakdown: Optional[StrengthBreakdown] = None
     created_at: str

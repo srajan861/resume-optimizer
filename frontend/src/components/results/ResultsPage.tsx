@@ -4,12 +4,23 @@ import { useAuth } from '../../hooks/useAuth'
 import { getAnalysis } from '../../services/api'
 import type { AnalysisResult } from '../../types'
 import ScoreRing from '../ui/ScoreRing'
+import CoverLetterCard from './CoverLetterCard'
+import JDIntelligenceCard from './JDIntelligenceCard'
+import SkillGapCard from './SkillGapCard'
+import StrengthBreakdownCard from './StrengthBreakdownCard'
 import { downloadAnalysisPDF } from '../../services/pdfExport'
 import {
   CheckCircle2, XCircle, Lightbulb, ArrowLeft,
   TrendingUp, AlertTriangle, Sparkles, ChevronDown, ChevronUp,
   Download,
 } from 'lucide-react'
+
+const PERSONA_LABELS: Record<string, string> = {
+  standard: 'Standard Recruiter',
+  faang: 'FAANG Recruiter',
+  startup: 'Startup Recruiter',
+  hr: 'HR Recruiter',
+}
 
 function ATSBar({ score }: { score: number }) {
   const color = score >= 70 ? '#a3ff47' : score >= 45 ? '#47c8ff' : '#ff6b47'
@@ -106,6 +117,8 @@ export default function ResultsPage() {
   }
 
   const { ats, recruiter, rewritten_bullets } = data
+  const jdIntel = data.jd_intelligence
+  const strength = data.strength_breakdown
   const visibleMissing = showAllKeywords ? ats.missing_keywords : ats.missing_keywords.slice(0, 12)
   const visibleBullets = showAllBullets ? rewritten_bullets : rewritten_bullets.slice(0, 3)
 
@@ -125,9 +138,17 @@ export default function ResultsPage() {
       {/* Header */}
       <div className="mb-10">
         <h1 className="font-display text-3xl font-bold text-white mb-1">Your Results</h1>
-        <p className="text-ink-500 text-xs font-mono">
-          {new Date(data.created_at).toLocaleString()}
-        </p>
+        <div className="flex items-center gap-3 flex-wrap">
+          <p className="text-ink-500 text-xs font-mono">
+            {new Date(data.created_at).toLocaleString()}
+          </p>
+          {recruiter.persona && (
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-mono px-2.5 py-1 rounded-full bg-acid/10 border border-acid/30 text-acid">
+              <Sparkles size={11} />
+              {PERSONA_LABELS[recruiter.persona] ?? 'Recruiter'} lens
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Score overview */}
@@ -160,6 +181,12 @@ export default function ResultsPage() {
           </div>
         </div>
       </div>
+
+      {/* JD Intelligence */}
+      {jdIntel && <JDIntelligenceCard data={jdIntel} />}
+
+      {/* Resume Strength Breakdown */}
+      {strength && <StrengthBreakdownCard data={strength} />}
 
       {/* Missing keywords */}
       {ats.missing_keywords.length > 0 && (
@@ -261,6 +288,12 @@ export default function ResultsPage() {
           )}
         </div>
       )}
+
+      {/* Skill Gap Roadmap */}
+      {analysisId && <SkillGapCard analysisId={analysisId} />}
+
+      {/* Cover Letter Generator */}
+      {analysisId && <CoverLetterCard analysisId={analysisId} />}
 
       {/* CTA */}
       <div className="mt-10 flex gap-4 flex-wrap">

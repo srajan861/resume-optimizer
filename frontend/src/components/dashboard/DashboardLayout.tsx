@@ -1,9 +1,10 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
-import { LayoutDashboard, Clock, LogOut, ChevronRight } from 'lucide-react'
+import { LayoutDashboard, Clock, LogOut, ChevronRight, Zap } from 'lucide-react'
 
 const NAV = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Analyze', end: true },
+  { to: '/dashboard/editor', icon: Zap, label: 'Live Editor', end: false },
   { to: '/dashboard/history', icon: Clock, label: 'History', end: false },
 ]
 

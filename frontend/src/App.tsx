@@ -6,6 +6,7 @@ import DashboardLayout from './components/dashboard/DashboardLayout'
 import UploadPage from './components/upload/UploadPage'
 import ResultsPage from './components/results/ResultsPage'
 import HistoryPage from './components/history/HistoryPage'
+import LiveEditorPage from './components/editor/LiveEditorPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -33,6 +34,7 @@ function AppRoutes() {
       >
         <Route index element={<UploadPage />} />
         <Route path="results/:analysisId" element={<ResultsPage />} />
+        <Route path="editor" element={<LiveEditorPage />} />
         <Route path="history" element={<HistoryPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
