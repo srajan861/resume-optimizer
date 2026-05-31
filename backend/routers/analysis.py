@@ -5,9 +5,10 @@ from models.schemas import (
     RewriteRequest, RewriteResponse,
     CoverLetterRequest, CoverLetterResponse,
     SkillGapRequest, SkillGapResponse,
+    LiveFeedbackRequest, LiveFeedbackResponse,
     ATSResult, RecruiterFeedback,
 )
-from services.ats_engine import compute_ats_score
+from services.ats_engine import compute_ats_score, compute_live_feedback
 from services.gemini_service import (
     simulate_recruiter, rewrite_bullet_points, generate_cover_letter,
     extract_jd_intelligence, generate_skill_gap_roadmap, analyze_strength_breakdown,
@@ -100,6 +101,17 @@ async def rewrite_bullets(req: RewriteRequest):
     
     rewritten = await rewrite_bullet_points(req.bullet_points, req.job_context or "")
     return RewriteResponse(rewritten=rewritten)
+
+
+@router.post("/live-feedback", response_model=LiveFeedbackResponse)
+async def live_feedback(req: LiveFeedbackRequest):
+    """
+    Instant, LLM-free scoring for the real-time resume editor.
+    Runs keyword matching + local heuristics — safe to call on every keystroke.
+    """
+    return await asyncio.to_thread(
+        compute_live_feedback, req.resume_text, req.job_description
+    )
 
 
 @router.post("/cover-letter", response_model=CoverLetterResponse)

@@ -121,6 +121,26 @@ export interface SkillGapResponse {
   roadmap: SkillGapRoadmap
 }
 
+// ── Live Feedback (Real-Time Editing) ─────────────────────────────────────────
+
+export type LiveTipType = 'good' | 'warning' | 'info'
+
+export interface LiveTip {
+  type: LiveTipType
+  message: string
+}
+
+export interface LiveFeedbackResponse {
+  overall_score: number
+  ats_score: number
+  impact_score: number
+  structure_score: number
+  matched_keywords: string[]
+  missing_keywords: string[]
+  word_count: number
+  tips: LiveTip[]
+}
+
 export interface AnalyzeFormState {
   resumeId: string | null
   jobDescription: string

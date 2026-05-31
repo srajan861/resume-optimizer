@@ -109,6 +109,29 @@ class RewriteResponse(BaseModel):
     rewritten: List[RewrittenBullet]
 
 
+# ── Live Feedback (Real-Time Editing) ────────────────────────────────────────
+
+class LiveFeedbackRequest(BaseModel):
+    resume_text: str = ""
+    job_description: str = ""
+
+
+class LiveTip(BaseModel):
+    type: str = "info"  # good | warning | info
+    message: str
+
+
+class LiveFeedbackResponse(BaseModel):
+    overall_score: int = Field(0, ge=0, le=100)
+    ats_score: float = Field(0, ge=0, le=100)
+    impact_score: int = Field(0, ge=0, le=100)
+    structure_score: int = Field(0, ge=0, le=100)
+    matched_keywords: List[str] = []
+    missing_keywords: List[str] = []
+    word_count: int = 0
+    tips: List[LiveTip] = []
+
+
 # ── Cover Letter ─────────────────────────────────────────────────────────────
 
 class CoverLetterRequest(BaseModel):

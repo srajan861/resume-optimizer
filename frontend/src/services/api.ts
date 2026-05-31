@@ -7,6 +7,7 @@ import type {
   CoverLetterTone,
   CoverLetterResponse,
   SkillGapResponse,
+  LiveFeedbackResponse,
 } from '../types'
 
 const BASE_URL = import.meta.env.VITE_API_URL || '/api'
@@ -115,6 +116,24 @@ export async function generateSkillGapRoadmap(params: {
     }),
   })
   return handleResponse<SkillGapResponse>(res)
+}
+
+// ── Live Feedback ───────────────────────────────────────────────────────────
+
+export async function getLiveFeedback(
+  params: { resumeText: string; jobDescription: string },
+  signal?: AbortSignal
+): Promise<LiveFeedbackResponse> {
+  const res = await fetch(`${BASE_URL}/live-feedback`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      resume_text: params.resumeText,
+      job_description: params.jobDescription,
+    }),
+    signal,
+  })
+  return handleResponse<LiveFeedbackResponse>(res)
 }
 
 // ── History ───────────────────────────────────────────────────────────────────
