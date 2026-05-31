@@ -63,6 +63,21 @@ class JDIntelligence(BaseModel):
     education: str = ""
 
 
+class StrengthMetric(BaseModel):
+    score: int = Field(0, ge=0, le=100)
+    rationale: str = ""
+
+
+class StrengthBreakdown(BaseModel):
+    skill_match: StrengthMetric = StrengthMetric()
+    experience_relevance: StrengthMetric = StrengthMetric()
+    project_depth: StrengthMetric = StrengthMetric()
+    keyword_coverage: StrengthMetric = StrengthMetric()
+    impact_score: StrengthMetric = StrengthMetric()
+    structure_score: StrengthMetric = StrengthMetric()
+    overall: int = Field(0, ge=0, le=100)
+
+
 class RewrittenBullet(BaseModel):
     original: str
     improved: str
@@ -74,6 +89,7 @@ class AnalysisResult(BaseModel):
     recruiter: RecruiterFeedback
     rewritten_bullets: List[RewrittenBullet]
     jd_intelligence: Optional[JDIntelligence] = None
+    strength_breakdown: Optional[StrengthBreakdown] = None
     created_at: str
 
 
@@ -159,4 +175,5 @@ class AnalysisDetailResponse(BaseModel):
     recruiter: RecruiterFeedback
     rewritten_bullets: List[RewrittenBullet]
     jd_intelligence: Optional[JDIntelligence] = None
+    strength_breakdown: Optional[StrengthBreakdown] = None
     created_at: str

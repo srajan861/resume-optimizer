@@ -6,6 +6,7 @@ from core.config import settings
 from models.schemas import (
     RecruiterFeedback, RewrittenBullet, JDIntelligence,
     SkillGapRoadmap, SkillGapItem,
+    StrengthBreakdown, StrengthMetric,
 )
 ROLE_CONTEXT = {
     "sde": "Software Development Engineer (SDE) role focusing on system design, coding, and software architecture",
@@ -440,3 +441,87 @@ Respond with ONLY a valid JSON object. No markdown, no explanation, just raw JSO
     except Exception as e:
         print(f"❌ Groq skill gap roadmap failed: {type(e).__name__}: {e}")
         raise
+
+
+# ── Resume Strength Breakdown ────────────────────────────────────────────────
+
+_STRENGTH_DIMENSIONS = [
+    "skill_match",
+    "experience_relevance",
+    "project_depth",
+    "keyword_coverage",
+    "impact_score",
+    "structure_score",
+]
+
+
+def _clamp_score(value, default: int = 0) -> int:
+    try:
+        n = int(round(float(value)))
+    except (TypeError, ValueError):
+        return default
+    return max(0, min(100, n))
+
+
+async def analyze_strength_breakdown(
+    resume_text: str,
+    jd_text: str,
+) -> StrengthBreakdown:
+    """Score the resume across multiple dimensions using Groq."""
+    prompt = f"""You are an expert resume evaluator and hiring analyst.
+
+Score the resume against the job description across SIX independent dimensions.
+Each dimension is scored 0-100. Be discerning — use the full range, do not cluster scores.
+
+Dimensions:
+1. skill_match — how well the candidate's skills align with the job's required skills
+2. experience_relevance — how relevant their work experience is to this specific role
+3. project_depth — depth, complexity, and substance of projects/work shown
+4. keyword_coverage — coverage of important terms/technologies from the job description
+5. impact_score — presence of quantified, measurable outcomes (numbers, %, scale)
+6. structure_score — clarity, organization, formatting, and readability of the resume
+
+## JOB DESCRIPTION:
+{jd_text[:2800]}
+
+## RESUME:
+{resume_text[:2800]}
+
+Respond with ONLY a valid JSON object. No markdown, no explanation, just raw JSON:
+{{
+  "skill_match": {{"score": <0-100>, "rationale": "<one short sentence>"}},
+  "experience_relevance": {{"score": <0-100>, "rationale": "<one short sentence>"}},
+  "project_depth": {{"score": <0-100>, "rationale": "<one short sentence>"}},
+  "keyword_coverage": {{"score": <0-100>, "rationale": "<one short sentence>"}},
+  "impact_score": {{"score": <0-100>, "rationale": "<one short sentence>"}},
+  "structure_score": {{"score": <0-100>, "rationale": "<one short sentence>"}}
+}}"""
+
+    try:
+        client = get_client()
+        response = client.chat.completions.create(
+            model=MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.2,
+            max_tokens=1024,
+        )
+        raw = response.choices[0].message.content or ""
+        print("✅ Groq strength breakdown generated")
+        data = _extract_json(raw)
+
+        metrics = {}
+        for dim in _STRENGTH_DIMENSIONS:
+            entry = data.get(dim, {})
+            if not isinstance(entry, dict):
+                entry = {}
+            metrics[dim] = StrengthMetric(
+                score=_clamp_score(entry.get("score", 0)),
+                rationale=str(entry.get("rationale", "")).strip(),
+            )
+
+        overall = round(sum(m.score for m in metrics.values()) / len(metrics))
+
+        return StrengthBreakdown(overall=overall, **metrics)
+    except Exception as e:
+        print(f"❌ Groq strength breakdown failed: {type(e).__name__}: {e}")
+        return StrengthBreakdown()

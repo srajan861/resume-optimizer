@@ -7,6 +7,7 @@ import ScoreRing from '../ui/ScoreRing'
 import CoverLetterCard from './CoverLetterCard'
 import JDIntelligenceCard from './JDIntelligenceCard'
 import SkillGapCard from './SkillGapCard'
+import StrengthBreakdownCard from './StrengthBreakdownCard'
 import { downloadAnalysisPDF } from '../../services/pdfExport'
 import {
   CheckCircle2, XCircle, Lightbulb, ArrowLeft,
@@ -117,6 +118,7 @@ export default function ResultsPage() {
 
   const { ats, recruiter, rewritten_bullets } = data
   const jdIntel = data.jd_intelligence
+  const strength = data.strength_breakdown
   const visibleMissing = showAllKeywords ? ats.missing_keywords : ats.missing_keywords.slice(0, 12)
   const visibleBullets = showAllBullets ? rewritten_bullets : rewritten_bullets.slice(0, 3)
 
@@ -182,6 +184,9 @@ export default function ResultsPage() {
 
       {/* JD Intelligence */}
       {jdIntel && <JDIntelligenceCard data={jdIntel} />}
+
+      {/* Resume Strength Breakdown */}
+      {strength && <StrengthBreakdownCard data={strength} />}
 
       {/* Missing keywords */}
       {ats.missing_keywords.length > 0 && (

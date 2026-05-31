@@ -30,12 +30,28 @@ export interface JDIntelligence {
   education: string
 }
 
+export interface StrengthMetric {
+  score: number
+  rationale: string
+}
+
+export interface StrengthBreakdown {
+  skill_match: StrengthMetric
+  experience_relevance: StrengthMetric
+  project_depth: StrengthMetric
+  keyword_coverage: StrengthMetric
+  impact_score: StrengthMetric
+  structure_score: StrengthMetric
+  overall: number
+}
+
 export interface AnalysisResult {
   analysis_id: string
   ats: ATSResult
   recruiter: RecruiterFeedback
   rewritten_bullets: RewrittenBullet[]
   jd_intelligence?: JDIntelligence | null
+  strength_breakdown?: StrengthBreakdown | null
   created_at: string
 }
 
