@@ -1,6 +1,6 @@
 import json
 import re
-from typing import List
+from typing import List, Optional
 from groq import Groq
 from core.config import settings
 from models.schemas import (
