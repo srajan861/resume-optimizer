@@ -174,6 +174,29 @@ class SkillGapResponse(BaseModel):
     roadmap: SkillGapRoadmap
 
 
+# ── Red Flag Detection ──────────────────────────────────────────────────────
+
+class RedFlag(BaseModel):
+    category: str  # buzzword | metrics | gap | weak_verbs | tech_overload | length
+    severity: str  # critical | warning | info
+    message: str
+    details: Optional[str] = ""
+
+
+class RedFlagReport(BaseModel):
+    flags: List[RedFlag] = []
+    total_count: int = 0
+    severity_breakdown: dict = {"critical": 0, "warning": 0, "info": 0}
+
+
+class RedFlagRequest(BaseModel):
+    resume_text: str
+
+
+class RedFlagResponse(BaseModel):
+    report: RedFlagReport
+
+
 # ── History ──────────────────────────────────────────────────────────────────
 
 class HistoryItem(BaseModel):

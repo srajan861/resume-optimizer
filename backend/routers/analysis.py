@@ -6,9 +6,10 @@ from models.schemas import (
     CoverLetterRequest, CoverLetterResponse,
     SkillGapRequest, SkillGapResponse,
     LiveFeedbackRequest, LiveFeedbackResponse,
+    RedFlagRequest, RedFlagResponse,
     ATSResult, RecruiterFeedback,
 )
-from services.ats_engine import compute_ats_score, compute_live_feedback
+from services.ats_engine import compute_ats_score, compute_live_feedback, detect_red_flags
 from services.gemini_service import (
     simulate_recruiter, rewrite_bullet_points, generate_cover_letter,
     extract_jd_intelligence, generate_skill_gap_roadmap, analyze_strength_breakdown,
@@ -221,3 +222,26 @@ async def get_analysis(analysis_id: str, user_id: str):
         "strength_breakdown": feedback.get("strength_breakdown") or None,
         "created_at": analysis.get("created_at", ""),
     }
+
+
+@router.post("/red-flags", response_model=RedFlagResponse)
+async def analyze_red_flags(req: RedFlagRequest):
+    """
+    Detect resume red flags that recruiters dislike.
+    
+    Checks for:
+    - Overused buzzwords (synergy, leverage, etc.)
+    - Lack of metrics and numbers
+    - Weak action verbs
+    - Employment gaps
+    - Technology overload
+    - Resume length issues
+    
+    Returns categorized warnings with severity levels.
+    """
+    if not req.resume_text or len(req.resume_text.strip()) < 50:
+        raise HTTPException(status_code=400, detail="Resume text is too short to analyze")
+    
+    report = await asyncio.to_thread(detect_red_flags, req.resume_text)
+    return RedFlagResponse(report=report)
+

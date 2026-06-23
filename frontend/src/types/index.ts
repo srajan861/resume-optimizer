@@ -52,6 +52,7 @@ export interface AnalysisResult {
   rewritten_bullets: RewrittenBullet[]
   jd_intelligence?: JDIntelligence | null
   strength_breakdown?: StrengthBreakdown | null
+  resume_text?: string
   created_at: string
 }
 
@@ -140,6 +141,34 @@ export interface LiveFeedbackResponse {
   word_count: number
   tips: LiveTip[]
 }
+
+// ── Red Flag Detection ────────────────────────────────────────────────────────
+
+export type RedFlagCategory = 'buzzword' | 'metrics' | 'gap' | 'weak_verbs' | 'tech_overload' | 'length' | 'structure'
+export type RedFlagSeverity = 'critical' | 'warning' | 'info'
+
+export interface RedFlag {
+  category: RedFlagCategory
+  severity: RedFlagSeverity
+  message: string
+  details?: string
+}
+
+export interface RedFlagReport {
+  flags: RedFlag[]
+  total_count: number
+  severity_breakdown: {
+    critical: number
+    warning: number
+    info: number
+  }
+}
+
+export interface RedFlagResponse {
+  report: RedFlagReport
+}
+
+// ── Form State ────────────────────────────────────────────────────────────────
 
 export interface AnalyzeFormState {
   resumeId: string | null

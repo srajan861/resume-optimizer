@@ -8,6 +8,7 @@ import CoverLetterCard from './CoverLetterCard'
 import JDIntelligenceCard from './JDIntelligenceCard'
 import SkillGapCard from './SkillGapCard'
 import StrengthBreakdownCard from './StrengthBreakdownCard'
+import RedFlagCard from './RedFlagCard'
 import { downloadAnalysisPDF } from '../../services/pdfExport'
 import {
   CheckCircle2, XCircle, Lightbulb, ArrowLeft,
@@ -91,7 +92,13 @@ export default function ResultsPage() {
     if (!data && analysisId && user) {
       setLoading(true)
       getAnalysis(analysisId, user.id)
-        .then(setData)
+        .then((result) => {
+          setData(result)
+          // Fetch resume text if available
+          if (result.resume_text) {
+            setResumeText(result.resume_text)
+          }
+        })
         .catch(console.error)
         .finally(() => setLoading(false))
     }
@@ -187,6 +194,9 @@ export default function ResultsPage() {
 
       {/* Resume Strength Breakdown */}
       {strength && <StrengthBreakdownCard data={strength} />}
+
+      {/* Red Flag Detector */}
+      {resumeText && <RedFlagCard resumeText={resumeText} />}
 
       {/* Missing keywords */}
       {ats.missing_keywords.length > 0 && (

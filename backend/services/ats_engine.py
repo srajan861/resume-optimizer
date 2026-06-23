@@ -1,6 +1,8 @@
 import re
-from typing import Set, List, Tuple
-from models.schemas import ATSResult, LiveFeedbackResponse, LiveTip
+from typing import Set, List, Tuple, Dict
+from datetime import datetime
+from collections import Counter
+from models.schemas import ATSResult, LiveFeedbackResponse, LiveTip, RedFlag, RedFlagReport
 
 # Common English stopwords to filter out
 STOPWORDS = {
@@ -261,4 +263,165 @@ def compute_live_feedback(resume_text: str, jd_text: str) -> LiveFeedbackRespons
         missing_keywords=missing,
         word_count=word_count,
         tips=tips[:8],
+    )
+
+
+# ── Red Flag Detector ───────────────────────────────────────────────────────
+
+# Common resume buzzwords that recruiters dislike when overused
+BUZZWORDS = {
+    "synergy", "leverage", "utilize", "innovative", "passionate", "rockstar",
+    "ninja", "guru", "wizard", "thought leader", "team player", "detail-oriented",
+    "proactive", "results-driven", "strategic thinker", "go-getter", "hard-working",
+    "self-motivated", "enthusiastic", "dynamic", "proven track record", "best of breed",
+}
+
+# Weak action verbs that should be replaced
+WEAK_VERBS = {
+    "handled", "dealt with", "managed", "helped", "supported", "assisted",
+    "worked on", "responsible for", "tasked with", "involved in", "duties included",
+}
+
+
+def detect_red_flags(resume_text: str) -> RedFlagReport:
+    """
+    Scan resume for common red flags that recruiters dislike.
+    Returns structured report with categorized warnings.
+    """
+    flags: List[RedFlag] = []
+    resume_lower = resume_text.lower()
+    lines = _split_lines(resume_text)
+    bullets = [m.group(1).strip() for m in _BULLET_RE.finditer(resume_text)]
+    candidates = bullets if bullets else [ln for ln in lines if len(ln) > 25]
+    
+    # 1. Repeated Buzzwords Detection
+    buzzword_counts = Counter()
+    for word in BUZZWORDS:
+        count = resume_lower.count(word)
+        if count > 0:
+            buzzword_counts[word] = count
+    
+    excessive_buzzwords = {w: c for w, c in buzzword_counts.items() if c >= 3}
+    if excessive_buzzwords:
+        top_offenders = ", ".join([f"'{w}' ({c}x)" for w, c in list(excessive_buzzwords.items())[:3]])
+        flags.append(RedFlag(
+            category="buzzword",
+            severity="warning",
+            message=f"Overused buzzwords detected: {top_offenders}",
+            details="Replace generic buzzwords with specific, measurable achievements."
+        ))
+    
+    # 2. Lack of Metrics/Numbers
+    if candidates:
+        bullets_with_metrics = sum(1 for b in candidates if _PERCENT_METRIC_RE.search(b))
+        metric_ratio = bullets_with_metrics / len(candidates)
+        
+        if metric_ratio < 0.2:
+            flags.append(RedFlag(
+                category="metrics",
+                severity="critical",
+                message=f"Only {bullets_with_metrics}/{len(candidates)} bullet points contain numbers or metrics",
+                details="Add quantified results: percentages, dollar amounts, scale, or time saved."
+            ))
+        elif metric_ratio < 0.4:
+            flags.append(RedFlag(
+                category="metrics",
+                severity="warning",
+                message=f"{bullets_with_metrics}/{len(candidates)} bullets have metrics — add more quantified impact",
+                details="Aim for 50%+ of bullets containing numbers to demonstrate measurable achievements."
+            ))
+    
+    # 3. Weak Action Verbs
+    weak_verb_bullets = []
+    for bullet in candidates:
+        first_word = bullet.split()[0].lower().strip(".,:;") if bullet.split() else ""
+        if first_word in WEAK_VERBS or any(weak in bullet.lower() for weak in ["responsible for", "worked on", "helped with"]):
+            weak_verb_bullets.append(bullet[:50] + "...")
+    
+    if len(weak_verb_bullets) >= 3:
+        flags.append(RedFlag(
+            category="weak_verbs",
+            severity="warning",
+            message=f"{len(weak_verb_bullets)} bullets use weak phrasing",
+            details=f"Replace with strong action verbs like: Led, Built, Optimized, Delivered, Reduced. Example: \"{weak_verb_bullets[0]}\""
+        ))
+    
+    # 4. Employment Gaps Detection (YYYY - YYYY pattern)
+    date_pattern = re.compile(r'(20\d{2}|19\d{2})')
+    years = [int(y) for y in date_pattern.findall(resume_text)]
+    years = sorted(set(years))
+    
+    if len(years) >= 2:
+        gaps = []
+        for i in range(len(years) - 1):
+            gap = years[i+1] - years[i]
+            if gap > 2:  # 2+ year gap
+                gaps.append((years[i], years[i+1], gap))
+        
+        if gaps:
+            for start, end, duration in gaps:
+                flags.append(RedFlag(
+                    category="gap",
+                    severity="info",
+                    message=f"{duration}-year gap detected ({start} → {end})",
+                    details="Consider adding a brief explanation if this gap is significant (education, personal projects, freelance)."
+                ))
+    
+    # 5. Technology Overload (too many unrelated techs)
+    tech_keywords = [
+        'python', 'java', 'javascript', 'typescript', 'react', 'angular', 'vue',
+        'node', 'django', 'flask', 'spring', 'aws', 'azure', 'gcp', 'docker',
+        'kubernetes', 'terraform', 'jenkins', 'git', 'sql', 'mongodb', 'postgresql',
+        'redis', 'kafka', 'spark', 'hadoop', 'tensorflow', 'pytorch', 'scikit',
+    ]
+    
+    found_techs = [tech for tech in tech_keywords if tech in resume_lower]
+    
+    if len(found_techs) > 20:
+        flags.append(RedFlag(
+            category="tech_overload",
+            severity="warning",
+            message=f"{len(found_techs)} technologies listed — may appear scattered",
+            details="Focus on technologies relevant to your target role. Quality > quantity."
+        ))
+    
+    # 6. Resume Length Issues
+    word_count = len(tokenize(resume_text))
+    
+    if word_count < 200:
+        flags.append(RedFlag(
+            category="length",
+            severity="critical",
+            message=f"Resume is too short ({word_count} words)",
+            details="Expand with more details about your achievements, projects, and impact."
+        ))
+    elif word_count > 1200:
+        flags.append(RedFlag(
+            category="length",
+            severity="warning",
+            message=f"Resume is very long ({word_count} words)",
+            details="Consider condensing to 1-2 pages. Focus on most impactful achievements from recent 5-7 years."
+        ))
+    
+    # 7. No Clear Sections
+    sections = ["experience", "education", "skill", "project"]
+    present_sections = sum(1 for s in sections if s in resume_lower)
+    
+    if present_sections < 2:
+        flags.append(RedFlag(
+            category="structure",
+            severity="warning",
+            message="Resume lacks clear section headers",
+            details="Add sections: Professional Experience, Skills, Education, Projects to improve readability."
+        ))
+    
+    # Build severity breakdown
+    severity_breakdown = {"critical": 0, "warning": 0, "info": 0}
+    for flag in flags:
+        severity_breakdown[flag.severity] += 1
+    
+    return RedFlagReport(
+        flags=flags,
+        total_count=len(flags),
+        severity_breakdown=severity_breakdown,
     )
