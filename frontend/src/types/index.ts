@@ -47,6 +47,7 @@ export interface StrengthBreakdown {
 
 export interface AnalysisResult {
   analysis_id: string
+  resume_id?: string
   ats: ATSResult
   recruiter: RecruiterFeedback
   rewritten_bullets: RewrittenBullet[]
@@ -166,6 +167,45 @@ export interface RedFlagReport {
 
 export interface RedFlagResponse {
   report: RedFlagReport
+}
+
+// ── Resume Evolution Tracker ──────────────────────────────────────────────────
+
+export interface VersionSnapshot {
+  analysis_id: string
+  version_number: number
+  ats_score: number
+  recruiter_score: number
+  created_at: string
+  jd_preview?: string
+}
+
+export interface EvolutionTimeline {
+  resume_id: string
+  total_versions: number
+  first_score: number
+  latest_score: number
+  improvement: number
+  versions: VersionSnapshot[]
+}
+
+export interface EvolutionResponse {
+  timeline: EvolutionTimeline
+}
+
+export interface VersionComparison {
+  version1: VersionSnapshot
+  version2: VersionSnapshot
+  score_diff: number
+  recruiter_diff: number
+  keyword_changes: {
+    added: string[]
+    removed: string[]
+  }
+}
+
+export interface CompareResponse {
+  comparison: VersionComparison
 }
 
 // ── Form State ────────────────────────────────────────────────────────────────

@@ -9,6 +9,8 @@ import type {
   SkillGapResponse,
   LiveFeedbackResponse,
   RedFlagResponse,
+  EvolutionResponse,
+  CompareResponse,
 } from '../types'
 
 const BASE_URL = import.meta.env.VITE_API_URL || '/api'
@@ -152,6 +154,29 @@ export async function detectRedFlags(
     signal,
   })
   return handleResponse<RedFlagResponse>(res)
+}
+
+// ── Resume Evolution ──────────────────────────────────────────────────────────
+
+export async function getResumeEvolution(
+  resumeId: string,
+  userId: string
+): Promise<EvolutionResponse> {
+  const res = await fetch(
+    `${BASE_URL}/evolution/${resumeId}?user_id=${userId}`
+  )
+  return handleResponse<EvolutionResponse>(res)
+}
+
+export async function compareVersions(
+  v1: string,
+  v2: string,
+  userId: string
+): Promise<CompareResponse> {
+  const res = await fetch(
+    `${BASE_URL}/evolution/compare?v1=${v1}&v2=${v2}&user_id=${userId}`
+  )
+  return handleResponse<CompareResponse>(res)
 }
 
 // ── History ───────────────────────────────────────────────────────────────────

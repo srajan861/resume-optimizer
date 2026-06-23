@@ -201,6 +201,7 @@ async def get_analysis(analysis_id: str, user_id: str):
     
     return {
         "analysis_id": analysis_id,
+        "resume_id": analysis.get("resume_id", ""),
         "resume_text": analysis.get("resumes", {}).get("parsed_text", "")[:1000],
         "job_description": analysis.get("job_descriptions", {}).get("content", ""),
         "ats": {

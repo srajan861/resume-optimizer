@@ -100,6 +100,7 @@ export default function UploadPage() {
         state: {
           result: result.data,
           resumeText: uploaded.parsed_text,
+          resumeId: uploaded.resume_id,
         }
       })
     } catch (err: unknown) {

@@ -197,6 +197,48 @@ class RedFlagResponse(BaseModel):
     report: RedFlagReport
 
 
+# ── Resume Evolution Tracker ────────────────────────────────────────────────
+
+class VersionSnapshot(BaseModel):
+    analysis_id: str
+    version_number: int
+    ats_score: float
+    recruiter_score: float
+    created_at: str
+    jd_preview: str = ""
+
+
+class EvolutionTimeline(BaseModel):
+    resume_id: str
+    total_versions: int
+    first_score: float
+    latest_score: float
+    improvement: float  # percentage improvement
+    versions: List[VersionSnapshot]
+
+
+class EvolutionResponse(BaseModel):
+    timeline: EvolutionTimeline
+
+
+class VersionCompareRequest(BaseModel):
+    version1_id: str
+    version2_id: str
+    user_id: str
+
+
+class VersionComparison(BaseModel):
+    version1: VersionSnapshot
+    version2: VersionSnapshot
+    score_diff: float
+    recruiter_diff: float
+    keyword_changes: dict  # added, removed keywords
+
+
+class CompareResponse(BaseModel):
+    comparison: VersionComparison
+
+
 # ── History ──────────────────────────────────────────────────────────────────
 
 class HistoryItem(BaseModel):

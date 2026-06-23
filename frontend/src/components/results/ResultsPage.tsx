@@ -9,6 +9,7 @@ import JDIntelligenceCard from './JDIntelligenceCard'
 import SkillGapCard from './SkillGapCard'
 import StrengthBreakdownCard from './StrengthBreakdownCard'
 import RedFlagCard from './RedFlagCard'
+import EvolutionCard from './EvolutionCard'
 import { downloadAnalysisPDF } from '../../services/pdfExport'
 import {
   CheckCircle2, XCircle, Lightbulb, ArrowLeft,
@@ -84,6 +85,9 @@ export default function ResultsPage() {
   const [resumeText, setResumeText] = useState<string>(
     (location.state as { resumeText?: string })?.resumeText ?? ''
   )
+  const [resumeId, setResumeId] = useState<string>(
+    (location.state as { resumeId?: string })?.resumeId ?? ''
+  )
   const [loading, setLoading] = useState(!data)
   const [showAllKeywords, setShowAllKeywords] = useState(false)
   const [showAllBullets, setShowAllBullets] = useState(false)
@@ -97,6 +101,10 @@ export default function ResultsPage() {
           // Fetch resume text if available
           if (result.resume_text) {
             setResumeText(result.resume_text)
+          }
+          // Fetch resume_id if available
+          if (result.resume_id) {
+            setResumeId(result.resume_id)
           }
         })
         .catch(console.error)
@@ -301,6 +309,9 @@ export default function ResultsPage() {
 
       {/* Skill Gap Roadmap */}
       {analysisId && <SkillGapCard analysisId={analysisId} />}
+
+      {/* Resume Evolution Tracker */}
+      {resumeId && <EvolutionCard resumeId={resumeId} />}
 
       {/* Cover Letter Generator */}
       {analysisId && <CoverLetterCard analysisId={analysisId} />}

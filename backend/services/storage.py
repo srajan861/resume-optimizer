@@ -184,6 +184,127 @@ async def get_user_history(user_id: str, limit: int = 20) -> List[dict]:
         raise HTTPException(status_code=500, detail=f"Failed to fetch history: {str(e)}")
 
 
+# ── Resume Evolution ──────────────────────────────────────────────────────────
+
+async def get_resume_evolution(resume_id: str, user_id: str) -> Optional[dict]:
+    """Fetch all versions/analyses for a specific resume to track evolution."""
+    supabase = get_supabase()
+    
+    try:
+        # Get all analyses for this resume, ordered by creation time
+        result = (
+            supabase.table("analyses")
+            .select("id, ats_score, recruiter_score, created_at, job_descriptions(content)")
+            .eq("resume_id", resume_id)
+            .eq("user_id", user_id)
+            .order("created_at", desc=False)  # Ascending for version numbering
+            .execute()
+        )
+        
+        if not result.data:
+            return None
+        
+        versions = []
+        for idx, analysis in enumerate(result.data, 1):
+            jd_content = (analysis.get("job_descriptions") or {}).get("content", "")
+            jd_preview = jd_content[:100] if jd_content else "No JD"
+            
+            versions.append({
+                "analysis_id": analysis["id"],
+                "version_number": idx,
+                "ats_score": float(analysis.get("ats_score", 0)),
+                "recruiter_score": float(analysis.get("recruiter_score", 0)),
+                "created_at": analysis.get("created_at", ""),
+                "jd_preview": jd_preview,
+            })
+        
+        # Calculate improvement
+        first_score = versions[0]["ats_score"] if versions else 0
+        latest_score = versions[-1]["ats_score"] if versions else 0
+        improvement = latest_score - first_score
+        
+        return {
+            "resume_id": resume_id,
+            "total_versions": len(versions),
+            "first_score": first_score,
+            "latest_score": latest_score,
+            "improvement": round(improvement, 1),
+            "versions": versions,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch evolution: {str(e)}")
+
+
+async def compare_versions(v1_id: str, v2_id: str, user_id: str) -> Optional[dict]:
+    """Compare two analysis versions side-by-side."""
+    supabase = get_supabase()
+    
+    try:
+        # Fetch both analyses
+        v1 = (
+            supabase.table("analyses")
+            .select("id, ats_score, recruiter_score, created_at, job_descriptions(content), feedback(matched_keywords, missing_keywords)")
+            .eq("id", v1_id)
+            .eq("user_id", user_id)
+            .single()
+            .execute()
+        )
+        
+        v2 = (
+            supabase.table("analyses")
+            .select("id, ats_score, recruiter_score, created_at, job_descriptions(content), feedback(matched_keywords, missing_keywords)")
+            .eq("id", v2_id)
+            .eq("user_id", user_id)
+            .single()
+            .execute()
+        )
+        
+        if not v1.data or not v2.data:
+            return None
+        
+        # Build version snapshots
+        def build_snapshot(data, version_num):
+            jd_content = (data.get("job_descriptions") or {}).get("content", "")
+            return {
+                "analysis_id": data["id"],
+                "version_number": version_num,
+                "ats_score": float(data.get("ats_score", 0)),
+                "recruiter_score": float(data.get("recruiter_score", 0)),
+                "created_at": data.get("created_at", ""),
+                "jd_preview": jd_content[:100] if jd_content else "",
+            }
+        
+        version1 = build_snapshot(v1.data, 1)
+        version2 = build_snapshot(v2.data, 2)
+        
+        # Calculate diffs
+        score_diff = version2["ats_score"] - version1["ats_score"]
+        recruiter_diff = version2["recruiter_score"] - version1["recruiter_score"]
+        
+        # Keyword changes
+        v1_feedback = v1.data.get("feedback", {})
+        v2_feedback = v2.data.get("feedback", {})
+        
+        v1_matched = set(v1_feedback.get("matched_keywords", []) if isinstance(v1_feedback, dict) else [])
+        v2_matched = set(v2_feedback.get("matched_keywords", []) if isinstance(v2_feedback, dict) else [])
+        
+        added_keywords = list(v2_matched - v1_matched)
+        removed_keywords = list(v1_matched - v2_matched)
+        
+        return {
+            "version1": version1,
+            "version2": version2,
+            "score_diff": round(score_diff, 1),
+            "recruiter_diff": round(recruiter_diff, 1),
+            "keyword_changes": {
+                "added": added_keywords[:10],
+                "removed": removed_keywords[:10],
+            },
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to compare versions: {str(e)}")
+
+
 async def delete_analysis(analysis_id: str, user_id: str) -> bool:
     """Delete an analysis and its associated feedback."""
     supabase = get_supabase()
