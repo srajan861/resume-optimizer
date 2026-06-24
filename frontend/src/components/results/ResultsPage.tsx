@@ -11,6 +11,7 @@ import StrengthBreakdownCard from './StrengthBreakdownCard'
 import RedFlagCard from './RedFlagCard'
 import EvolutionCard from './EvolutionCard'
 import SemanticMatchCard from './SemanticMatchCard'
+import AutoEditorCard from './AutoEditorCard'
 import { downloadAnalysisPDF } from '../../services/pdfExport'
 import {
   CheckCircle2, XCircle, Lightbulb, ArrowLeft,
@@ -314,6 +315,9 @@ export default function ResultsPage() {
 
       {/* Skill Gap Roadmap */}
       {analysisId && <SkillGapCard analysisId={analysisId} />}
+
+      {/* AI Resume Auto-Editor */}
+      {analysisId && resumeText && <AutoEditorCard analysisId={analysisId} resumeText={resumeText} />}
 
       {/* Resume Evolution Tracker */}
       {resumeId && <EvolutionCard resumeId={resumeId} />}

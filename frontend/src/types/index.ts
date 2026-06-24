@@ -240,3 +240,39 @@ export type LoadingStep =
   | 'saving'
   | 'done'
   | 'error'
+
+// ── AI Resume Auto-Editor ─────────────────────────────────────────────────────
+
+export type EditType = 'add' | 'replace' | 'remove' | 'reword'
+export type EditPriority = 'high' | 'medium' | 'low'
+export type EditSection = 'experience' | 'skills' | 'education' | 'projects' | 'summary'
+
+export interface EditSuggestion {
+  section: EditSection
+  type: EditType
+  original_text: string
+  suggested_text: string
+  reason: string
+  priority: EditPriority
+  impact: string
+}
+
+export interface AutoEditSuggestionsResponse {
+  suggestions: EditSuggestion[]
+  total_count: number
+  summary: string
+}
+
+export interface GeneratedResumeFile {
+  format: 'pdf' | 'docx'
+  filename: string
+  download_url: string
+  size_bytes: number
+}
+
+export interface ApplyEditsResponse {
+  success: boolean
+  edited_text: string
+  files: GeneratedResumeFile[]
+  changes_summary: string
+}

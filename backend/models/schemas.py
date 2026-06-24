@@ -281,3 +281,50 @@ class AnalysisDetailResponse(BaseModel):
     jd_intelligence: Optional[JDIntelligence] = None
     strength_breakdown: Optional[StrengthBreakdown] = None
     created_at: str
+
+
+# ── AI Resume Auto-Editor ───────────────────────────────────────────────────
+
+class EditSuggestion(BaseModel):
+    """A single edit suggestion for the resume."""
+    section: str  # experience | skills | education | projects | summary
+    type: str  # add | replace | remove | reword
+    original_text: str = ""  # Empty if type is 'add'
+    suggested_text: str
+    reason: str  # Why this change improves the resume
+    priority: str = "medium"  # high | medium | low
+    impact: str = ""  # Expected impact on ATS/recruiter score
+
+
+class AutoEditSuggestionsRequest(BaseModel):
+    analysis_id: str
+    user_id: str
+    max_suggestions: Optional[int] = 10
+
+
+class AutoEditSuggestionsResponse(BaseModel):
+    suggestions: List[EditSuggestion]
+    total_count: int
+    summary: str  # Overall assessment of what needs improvement
+
+
+class ApplyEditsRequest(BaseModel):
+    analysis_id: str  # To fetch the original LaTeX code
+    resume_text: str
+    applied_suggestions: List[EditSuggestion]
+    format: str = "both"  # pdf | docx | both
+    user_id: str
+
+
+class GeneratedResumeFile(BaseModel):
+    format: str  # pdf | docx
+    filename: str
+    download_url: str
+    size_bytes: int
+
+
+class ApplyEditsResponse(BaseModel):
+    success: bool
+    edited_text: str  # The modified resume text
+    files: List[GeneratedResumeFile]  # Generated PDF/DOCX files
+    changes_summary: str  # Summary of what was changed

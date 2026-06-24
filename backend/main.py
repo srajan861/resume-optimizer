@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import uvicorn
 
-from routers import resume, analysis, history, evolution
+from routers import resume, analysis, history, evolution, auto_editor
 from core.config import settings
 
 
@@ -33,6 +33,7 @@ app.include_router(resume.router, prefix="/api", tags=["Resume"])
 app.include_router(analysis.router, prefix="/api", tags=["Analysis"])
 app.include_router(history.router, prefix="/api", tags=["History"])
 app.include_router(evolution.router, prefix="/api", tags=["Evolution"])
+app.include_router(auto_editor.router, tags=["Auto-Editor"])
 
 
 @app.get("/")

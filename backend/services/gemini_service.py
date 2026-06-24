@@ -525,3 +525,118 @@ Respond with ONLY a valid JSON object. No markdown, no explanation, just raw JSO
     except Exception as e:
         print(f"❌ Groq strength breakdown failed: {type(e).__name__}: {e}")
         return StrengthBreakdown()
+
+
+# ── AI Resume Auto-Editor ────────────────────────────────────────────────────
+
+async def generate_auto_edit_suggestions(
+    resume_text: str,
+    jd_text: str,
+    ats_result: "ATSResult",
+    recruiter_feedback: "RecruiterFeedback",
+    max_suggestions: int = 10,
+) -> tuple[List["EditSuggestion"], str]:
+    """Generate AI-powered edit suggestions to improve the resume."""
+    from models.schemas import EditSuggestion
+    
+    # Build context from existing analysis
+    missing_kw = ", ".join(ats_result.missing_keywords[:15]) if ats_result.missing_keywords else "none"
+    weaknesses = "\n".join(f"- {w}" for w in recruiter_feedback.weaknesses[:5])
+    suggestions_context = "\n".join(f"- {s}" for s in recruiter_feedback.suggestions[:5])
+    
+    prompt = f"""You are an expert resume optimization consultant and ATS specialist.
+
+Analyze the resume and generate SPECIFIC, ACTIONABLE edit suggestions to improve it for this job.
+Focus on high-impact changes that will boost ATS scores and recruiter appeal.
+
+## CURRENT ANALYSIS:
+- ATS Score: {ats_result.score:.0f}%
+- Recruiter Score: {recruiter_feedback.score:.1f}/10
+- Missing Keywords: {missing_kw}
+
+## WEAKNESSES IDENTIFIED:
+{weaknesses}
+
+## IMPROVEMENT SUGGESTIONS:
+{suggestions_context}
+
+## JOB DESCRIPTION:
+{jd_text[:2500]}
+
+## CURRENT RESUME:
+{resume_text[:3000]}
+
+Generate up to {max_suggestions} concrete edit suggestions. Each suggestion should:
+- Target a specific section (experience, skills, education, projects, summary)
+- Specify the type of edit (add, replace, remove, reword)
+- Include the original text (if replacing/removing) and suggested new text
+- Explain WHY this change improves the resume
+- Indicate priority (high/medium/low) and expected impact
+
+Focus on:
+1. Adding missing keywords naturally
+2. Replacing weak bullet points with strong, quantified ones
+3. Improving action verbs and measurable outcomes
+4. Fixing structure/formatting issues
+5. Removing fluff or buzzwords
+
+Respond with ONLY a valid JSON object. No markdown, no explanation:
+{{
+  "summary": "<2-3 sentence overall assessment of what needs improvement>",
+  "suggestions": [
+    {{
+      "section": "<experience|skills|education|projects|summary>",
+      "type": "<add|replace|remove|reword>",
+      "original_text": "<exact text from resume if replacing/removing, empty if adding>",
+      "suggested_text": "<the new/improved text>",
+      "reason": "<why this change improves the resume, one sentence>",
+      "priority": "<high|medium|low>",
+      "impact": "<expected impact, e.g., '+5% ATS', 'stronger action verb', 'adds missing keyword'>"
+    }}
+  ]
+}}"""
+
+    try:
+        client = get_client()
+        response = client.chat.completions.create(
+            model=MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.4,
+            max_tokens=2048,
+        )
+        raw = response.choices[0].message.content or ""
+        print("✅ Groq auto-edit suggestions generated")
+        data = _extract_json(raw)
+
+        summary = str(data.get("summary", "")).strip()
+        suggestions_data = data.get("suggestions", [])[:max_suggestions]
+        
+        suggestions: List[EditSuggestion] = []
+        for item in suggestions_data:
+            if not isinstance(item, dict):
+                continue
+            
+            # Validate type and priority
+            edit_type = str(item.get("type", "replace")).lower().strip()
+            if edit_type not in ("add", "replace", "remove", "reword"):
+                edit_type = "replace"
+            
+            priority = str(item.get("priority", "medium")).lower().strip()
+            if priority not in ("high", "medium", "low"):
+                priority = "medium"
+            
+            suggestions.append(EditSuggestion(
+                section=str(item.get("section", "experience")).strip(),
+                type=edit_type,
+                original_text=str(item.get("original_text", "")).strip(),
+                suggested_text=str(item.get("suggested_text", "")).strip(),
+                reason=str(item.get("reason", "")).strip(),
+                priority=priority,
+                impact=str(item.get("impact", "")).strip(),
+            ))
+
+        return suggestions, summary
+    except Exception as e:
+        print(f"❌ Groq auto-edit suggestions failed: {type(e).__name__}: {e}")
+        # Return safe fallback
+        return [], "Unable to generate suggestions at this time. Please try again."

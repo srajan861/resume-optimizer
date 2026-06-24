@@ -1,7 +1,8 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from models.schemas import ResumeUploadResponse
 from services.parser import extract_text_from_file, parse_resume_sections
-from services.storage import upload_resume_file, save_resume_record
+from services.storage import upload_resume_file, save_resume_record_with_latex
+from services.latex_service import resume_to_latex
 from core.config import settings
 
 router = APIRouter()
@@ -15,7 +16,8 @@ async def upload_resume(
     user_id: str = Form(...),
 ):
     """
-    Upload a resume (PDF or DOCX), extract text, and store in Supabase.
+    Upload a resume (PDF or DOCX), extract text, convert to LaTeX, and store in Supabase.
+    LaTeX format preserves ALL formatting and structure.
     Returns resume_id and parsed text preview.
     """
     # Validate file type
@@ -34,33 +36,28 @@ async def upload_resume(
             detail=f"File too large. Maximum size is {settings.MAX_FILE_SIZE_MB}MB.",
         )
     
-    # Re-wrap bytes as UploadFile-like for text extraction
-    from io import BytesIO
-    import types
-
-    mock_file = types.SimpleNamespace(
-        filename=filename,
-        read=lambda: file_bytes,
-    )
-
-    # Extract text (need UploadFile interface)
-    from fastapi import UploadFile as FUF
+    # Extract text
     import io
-
     up = UploadFile(filename=filename, file=io.BytesIO(file_bytes))
     raw_text = await extract_text_from_file(up)
     
     # Parse sections
     parsed = parse_resume_sections(raw_text)
     
-    # Upload to Supabase Storage
+    # Convert to LaTeX (preserves formatting)
+    print("🔄 Generating LaTeX code...")
+    latex_code = await resume_to_latex(raw_text, filename)
+    print(f"✅ LaTeX code ready ({len(latex_code)} chars)")
+    
+    # Upload original file to Supabase Storage
     file_url = await upload_resume_file(file_bytes, filename, user_id)
     
-    # Save to DB
-    resume_id = await save_resume_record(
+    # Save to DB with LaTeX code
+    resume_id = await save_resume_record_with_latex(
         user_id=user_id,
         file_url=file_url,
         parsed_text=raw_text,
+        latex_code=latex_code,
         filename=filename,
     )
     

@@ -52,6 +52,32 @@ async def save_resume_record(
         raise HTTPException(status_code=500, detail=f"Failed to save resume: {str(e)}")
 
 
+async def save_resume_record_with_latex(
+    user_id: str,
+    file_url: str,
+    parsed_text: str,
+    latex_code: str,
+    filename: str,
+) -> str:
+    """Save resume with LaTeX code to database and return resume_id."""
+    supabase = get_supabase()
+    resume_id = str(uuid.uuid4())
+    
+    try:
+        supabase.table("resumes").insert({
+            "id": resume_id,
+            "user_id": user_id,
+            "file_url": file_url,
+            "parsed_text": parsed_text,
+            "latex_code": latex_code,
+            "filename": filename,
+            "created_at": datetime.utcnow().isoformat(),
+        }).execute()
+        return resume_id
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save resume: {str(e)}")
+
+
 async def get_resume_text(resume_id: str, user_id: str) -> str:
     """Fetch parsed resume text from database."""
     supabase = get_supabase()
@@ -135,13 +161,14 @@ async def save_analysis(
 
 
 async def get_analysis_by_id(analysis_id: str, user_id: str) -> Optional[dict]:
-    """Fetch full analysis details."""
+    """Fetch full analysis details including resume text, LaTeX code, and job description."""
     supabase = get_supabase()
     
     try:
+        # Fetch analysis with related data (including latex_code)
         analysis = (
             supabase.table("analyses")
-            .select("*, job_descriptions(content), resumes(parsed_text)")
+            .select("*, job_descriptions(content), resumes(parsed_text, latex_code)")
             .eq("id", analysis_id)
             .eq("user_id", user_id)
             .single()
@@ -150,6 +177,7 @@ async def get_analysis_by_id(analysis_id: str, user_id: str) -> Optional[dict]:
         if not analysis.data:
             return None
         
+        # Fetch feedback
         feedback = (
             supabase.table("feedback")
             .select("*")
@@ -158,11 +186,25 @@ async def get_analysis_by_id(analysis_id: str, user_id: str) -> Optional[dict]:
             .execute()
         )
         
+        # Extract nested data
+        jd_data = analysis.data.get("job_descriptions", {})
+        resume_data = analysis.data.get("resumes", {})
+        
+        # Build combined result
         return {
-            "analysis": analysis.data,
+            "analysis_id": analysis.data.get("id"),
+            "user_id": analysis.data.get("user_id"),
+            "resume_id": analysis.data.get("resume_id"),
+            "ats_score": analysis.data.get("ats_score", 0),
+            "recruiter_score": analysis.data.get("recruiter_score", 0),
+            "created_at": analysis.data.get("created_at", ""),
+            "resume_text": resume_data.get("parsed_text", "") if isinstance(resume_data, dict) else "",
+            "latex_code": resume_data.get("latex_code", "") if isinstance(resume_data, dict) else "",
+            "job_description": jd_data.get("content", "") if isinstance(jd_data, dict) else "",
             "feedback": feedback.data if feedback.data else {},
         }
     except Exception as e:
+        print(f"❌ Failed to fetch analysis: {type(e).__name__}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch analysis: {str(e)}")
 
 

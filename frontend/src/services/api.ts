@@ -201,3 +201,43 @@ export async function deleteAnalysis(
   )
   return handleResponse<void>(res)
 }
+
+// ── AI Resume Auto-Editor ─────────────────────────────────────────────────────
+
+export async function getAutoEditSuggestions(params: {
+  analysisId: string
+  userId: string
+  maxSuggestions?: number
+}): Promise<import('../types').AutoEditSuggestionsResponse> {
+  const res = await fetch(`${BASE_URL}/auto-edit-suggestions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      analysis_id: params.analysisId,
+      user_id: params.userId,
+      max_suggestions: params.maxSuggestions ?? 10,
+    }),
+  })
+  return handleResponse<import('../types').AutoEditSuggestionsResponse>(res)
+}
+
+export async function applyResumeEdits(params: {
+  analysisId: string
+  resumeText: string
+  appliedSuggestions: import('../types').EditSuggestion[]
+  format: 'pdf' | 'docx' | 'both'
+  userId: string
+}): Promise<import('../types').ApplyEditsResponse> {
+  const res = await fetch(`${BASE_URL}/apply-edits`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      analysis_id: params.analysisId,
+      resume_text: params.resumeText,
+      applied_suggestions: params.appliedSuggestions,
+      format: params.format,
+      user_id: params.userId,
+    }),
+  })
+  return handleResponse<import('../types').ApplyEditsResponse>(res)
+}
