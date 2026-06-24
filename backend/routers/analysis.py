@@ -138,9 +138,9 @@ async def create_cover_letter(req: CoverLetterRequest):
     if not result:
         raise HTTPException(status_code=404, detail="Analysis not found")
 
-    analysis = result["analysis"]
-    resume_text = (analysis.get("resumes") or {}).get("parsed_text", "")
-    jd_text = (analysis.get("job_descriptions") or {}).get("content", "")
+    # Extract from flat structure
+    resume_text = result.get("resume_text", "")
+    jd_text = result.get("job_description", "")
 
     if not resume_text or not jd_text:
         raise HTTPException(
@@ -157,10 +157,11 @@ async def create_cover_letter(req: CoverLetterRequest):
             company_name=req.company_name or "",
             role_title=req.role_title or "",
         )
-    except Exception:
+    except Exception as e:
+        print(f"❌ Cover letter generation error: {type(e).__name__}: {e}")
         raise HTTPException(
             status_code=502,
-            detail="Cover letter generation failed. Please try again.",
+            detail=f"Cover letter generation failed: {str(e)}",
         )
 
     return CoverLetterResponse(cover_letter=letter, tone=req.tone or "professional")
@@ -173,10 +174,10 @@ async def create_skill_gap_roadmap(req: SkillGapRequest):
     if not result:
         raise HTTPException(status_code=404, detail="Analysis not found")
 
-    analysis = result["analysis"]
-    feedback = result["feedback"]
-    resume_text = (analysis.get("resumes") or {}).get("parsed_text", "")
-    jd_text = (analysis.get("job_descriptions") or {}).get("content", "")
+    # Extract from flat structure
+    resume_text = result.get("resume_text", "")
+    jd_text = result.get("job_description", "")
+    feedback = result.get("feedback", {})
 
     if not resume_text or not jd_text:
         raise HTTPException(
@@ -196,10 +197,11 @@ async def create_skill_gap_roadmap(req: SkillGapRequest):
             required_skills=required_skills,
             nice_to_have_skills=nice_skills,
         )
-    except Exception:
+    except Exception as e:
+        print(f"❌ Skill gap roadmap error: {type(e).__name__}: {e}")
         raise HTTPException(
             status_code=502,
-            detail="Skill gap roadmap generation failed. Please try again.",
+            detail=f"Skill gap roadmap generation failed: {str(e)}",
         )
 
     return SkillGapResponse(roadmap=roadmap)
@@ -212,23 +214,23 @@ async def get_analysis(analysis_id: str, user_id: str):
     if not result:
         raise HTTPException(status_code=404, detail="Analysis not found")
     
-    analysis = result["analysis"]
-    feedback = result["feedback"]
+    # Extract from flat structure
+    feedback = result.get("feedback", {})
     
     return {
-        "analysis_id": analysis_id,
-        "resume_id": analysis.get("resume_id", ""),
-        "resume_text": analysis.get("resumes", {}).get("parsed_text", "")[:1000],
-        "job_description": analysis.get("job_descriptions", {}).get("content", ""),
+        "analysis_id": result.get("analysis_id", ""),
+        "resume_id": result.get("resume_id", ""),
+        "resume_text": result.get("resume_text", "")[:1000],
+        "job_description": result.get("job_description", ""),
         "ats": {
-            "score": analysis.get("ats_score", 0),
+            "score": result.get("ats_score", 0),
             "matched_keywords": feedback.get("matched_keywords", []),
             "missing_keywords": feedback.get("missing_keywords", []),
             "total_jd_keywords": 0,
             "keyword_density": 0,
         },
         "recruiter": {
-            "score": analysis.get("recruiter_score", 0),
+            "score": result.get("recruiter_score", 0),
             "strengths": feedback.get("strengths", []),
             "weaknesses": feedback.get("weaknesses", []),
             "suggestions": feedback.get("suggestions", []),
@@ -237,7 +239,7 @@ async def get_analysis(analysis_id: str, user_id: str):
         "rewritten_bullets": feedback.get("rewritten_points", []),
         "jd_intelligence": feedback.get("jd_intelligence") or None,
         "strength_breakdown": feedback.get("strength_breakdown") or None,
-        "created_at": analysis.get("created_at", ""),
+        "created_at": result.get("created_at", ""),
     }
 
 

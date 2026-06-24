@@ -372,8 +372,11 @@ async def generate_skill_gap_roadmap(
     prompt = f"""You are a senior career coach and technical mentor.
 
 Compare the candidate's resume against the target job and produce a concrete skill-gap roadmap.
-Identify which required skills the candidate already demonstrates, and which are missing or weak.
-For each missing skill, give a realistic, ordered learning path (concrete steps/resources types,
+
+CRITICAL: Only include skills in "missing_skills" that are NOT already present in the candidate's resume.
+If a skill is already demonstrated in the resume, add it to "matched_skills" instead.
+
+For each TRULY MISSING skill, give a realistic, ordered learning path (concrete steps/resources types,
 not brand names), a priority, a one-line reason it matters for THIS role, and a rough time estimate.
 {skills_hint}
 
@@ -383,14 +386,17 @@ not brand names), a priority, a one-line reason it matters for THIS role, and a 
 ## CANDIDATE RESUME:
 {resume_text[:2500]}
 
+IMPORTANT: Carefully check the resume before listing a skill as "missing". If the candidate mentions the skill,
+technology, or related experience, DO NOT include it in missing_skills - add it to matched_skills instead.
+
 Respond with ONLY a valid JSON object. No markdown, no explanation, just raw JSON:
 {{
   "summary": "<2-3 sentence honest assessment of how ready the candidate is for this role>",
   "readiness_score": <integer 0-100 representing how well-prepared the candidate currently is>,
-  "matched_skills": [<skills from the JD the candidate already clearly has>],
+  "matched_skills": [<skills from the JD the candidate ALREADY CLEARLY HAS based on their resume>],
   "missing_skills": [
     {{
-      "skill": "<skill name>",
+      "skill": "<skill name that is NOT in the resume>",
       "priority": "<high|medium|low>",
       "reason": "<why this matters for this specific role, one sentence>",
       "learning_path": [<3-4 ordered, concrete steps to learn it>],

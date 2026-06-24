@@ -55,7 +55,7 @@ export default function CoverLetterCard({ analysisId }: { analysisId: string }) 
     }
   }
 
-  const handleDownload = () => {
+  const handleDownloadTxt = () => {
     if (!letter) return
     const blob = new Blob([letter], { type: 'text/plain;charset=utf-8' })
     const url = URL.createObjectURL(blob)
@@ -64,6 +64,66 @@ export default function CoverLetterCard({ analysisId }: { analysisId: string }) 
     a.download = 'cover-letter.txt'
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  const handleDownloadPdf = () => {
+    if (!letter) return
+    
+    // Create a formatted HTML version
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Cover Letter</title>
+  <style>
+    body {
+      font-family: 'Georgia', 'Times New Roman', serif;
+      line-height: 1.6;
+      max-width: 650px;
+      margin: 40px auto;
+      padding: 20px;
+      color: #333;
+    }
+    h1 {
+      font-size: 24px;
+      margin-bottom: 30px;
+      color: #1a1a1a;
+    }
+    p {
+      margin-bottom: 16px;
+      text-align: justify;
+    }
+    .date {
+      margin-bottom: 30px;
+      color: #666;
+    }
+    .signature {
+      margin-top: 30px;
+    }
+    @media print {
+      body { margin: 0; padding: 40px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="date">${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
+  ${letter.split('\n\n').map(para => `<p>${para.replace(/\n/g, '<br>')}</p>`).join('\n  ')}
+</body>
+</html>
+    `.trim()
+    
+    // Open in new tab for printing as PDF
+    const printWindow = window.open('', '_blank')
+    if (printWindow) {
+      printWindow.document.write(html)
+      printWindow.document.close()
+      
+      // Auto-trigger print dialog after a brief delay
+      setTimeout(() => {
+        printWindow.print()
+      }, 250)
+    }
   }
 
   return (
@@ -164,11 +224,18 @@ export default function CoverLetterCard({ analysisId }: { analysisId: string }) 
                 {copied ? 'Copied' : 'Copy'}
               </button>
               <button
-                onClick={handleDownload}
+                onClick={handleDownloadTxt}
                 className="flex items-center gap-1.5 text-xs font-mono text-ink-400 hover:text-acid transition-colors"
               >
                 <Download size={13} />
                 .txt
+              </button>
+              <button
+                onClick={handleDownloadPdf}
+                className="flex items-center gap-1.5 text-xs font-mono text-ink-400 hover:text-sky-cool transition-colors"
+              >
+                <Download size={13} />
+                PDF
               </button>
             </div>
           </div>

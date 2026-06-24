@@ -54,10 +54,12 @@ def extract_keywords(text: str, min_len: int = 2) -> Set[str]:
 
 def compute_ats_score(resume_text: str, jd_text: str) -> ATSResult:
     """
-    Compute ATS compatibility score.
+    Compute ATS compatibility score with improved matching logic.
     
-    Formula: match_score = (matched_keywords / total_jd_keywords) * 100
-    Enhanced with stopword removal and case normalization.
+    Enhanced to:
+    - Match partial words (e.g., "Python" in resume matches "Python," in JD)
+    - Case-insensitive matching
+    - Better keyword extraction (skills, technologies, qualifications)
     """
     resume_keywords = extract_keywords(resume_text)
     jd_keywords = extract_keywords(jd_text)
@@ -71,36 +73,58 @@ def compute_ats_score(resume_text: str, jd_text: str) -> ATSResult:
             keyword_density=0.0,
         )
     
-    matched = jd_keywords & resume_keywords
-    missing = jd_keywords - resume_keywords
+    # Improved matching: check if JD keyword appears in resume (substring match)
+    matched = set()
+    missing = set()
     
-    # Filter to meaningful missing keywords (length > 3, not pure numbers)
+    resume_text_lower = resume_text.lower()
+    
+    for jd_kw in jd_keywords:
+        # Check exact match first
+        if jd_kw in resume_keywords:
+            matched.add(jd_kw)
+        # Check if JD keyword appears anywhere in resume text (substring)
+        elif jd_kw in resume_text_lower:
+            matched.add(jd_kw)
+        # Check if any resume keyword contains the JD keyword
+        elif any(jd_kw in resume_kw for resume_kw in resume_keywords):
+            matched.add(jd_kw)
+        else:
+            missing.add(jd_kw)
+    
+    # Filter to meaningful keywords only
     meaningful_missing = sorted([
         k for k in missing
-        if len(k) > 3 and not k.replace(" ", "").isdigit()
-    ])
+        if len(k) > 2 and not k.replace(" ", "").replace("-", "").isdigit()
+    ])[:30]
     
     meaningful_matched = sorted([
         k for k in matched
-        if len(k) > 3
-    ])
+        if len(k) > 2
+    ])[:30]
     
-    # Cap at meaningful set sizes
-    total = len([k for k in jd_keywords if len(k) > 3])
-    match_count = len(meaningful_matched)
+    # Calculate score with better logic
+    total = len([k for k in jd_keywords if len(k) > 2])
+    match_count = len([k for k in matched if len(k) > 2])
     
+    # More generous scoring: 70+ is good, 50-70 is decent
     raw_score = (match_count / total * 100) if total > 0 else 0.0
+    
+    # Boost score if lots of keywords matched
+    if match_count > 15:
+        raw_score = min(raw_score * 1.15, 100)  # 15% boost for strong matches
+    
     score = min(round(raw_score, 1), 100.0)
     
-    # Keyword density: how dense are matched terms in resume
+    # Keyword density
     resume_tokens = tokenize(resume_text)
     resume_len = max(len(resume_tokens), 1)
     density = round((match_count / resume_len) * 100, 2)
     
     return ATSResult(
         score=score,
-        matched_keywords=meaningful_matched[:30],
-        missing_keywords=meaningful_missing[:30],
+        matched_keywords=meaningful_matched,
+        missing_keywords=meaningful_missing,
         total_jd_keywords=total,
         keyword_density=density,
     )
@@ -193,14 +217,15 @@ def _compute_structure_score(text: str) -> Tuple[int, List[LiveTip]]:
 
     score = 100
 
-    if word_count < 150:
+    # More lenient length checks - 1 page resume is ~300-500 words
+    if word_count < 100:
         score -= 40
-        tips.append(LiveTip(type="warning", message="Resume looks short. Aim for 250-600 words of substance."))
-    elif word_count > 900:
-        score -= 20
-        tips.append(LiveTip(type="warning", message="Resume is long. Tighten it toward one page of impact."))
+        tips.append(LiveTip(type="warning", message="Resume looks short. Aim for 250-500 words of substance."))
+    elif word_count > 800:
+        score -= 15
+        tips.append(LiveTip(type="info", message="Resume is detailed. Consider condensing if over 2 pages."))
     else:
-        tips.append(LiveTip(type="good", message="Length is in a healthy range."))
+        tips.append(LiveTip(type="good", message="Length is in a healthy range for 1-page resume."))
 
     if len(bullets) < 3:
         score -= 25
@@ -385,17 +410,17 @@ def detect_red_flags(resume_text: str) -> RedFlagReport:
             details="Focus on technologies relevant to your target role. Quality > quantity."
         ))
     
-    # 6. Resume Length Issues
+    # 6. Resume Length Issues - More lenient for 1-page resumes
     word_count = len(tokenize(resume_text))
     
-    if word_count < 200:
+    if word_count < 150:
         flags.append(RedFlag(
             category="length",
-            severity="critical",
-            message=f"Resume is too short ({word_count} words)",
-            details="Expand with more details about your achievements, projects, and impact."
+            severity="warning",
+            message=f"Resume is concise ({word_count} words)",
+            details="If this is intentionally a 1-page resume, this is fine. Otherwise, add more achievement details."
         ))
-    elif word_count > 1200:
+    elif word_count > 1500:
         flags.append(RedFlag(
             category="length",
             severity="warning",

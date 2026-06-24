@@ -71,7 +71,6 @@ export default function LandingPage() {
           >
             Analyze My Resume <ArrowRight size={18} />
           </button>
-          <span className="text-ink-500 text-sm font-mono">Free • No credit card</span>
         </div>
 
         {/* Score preview */}
