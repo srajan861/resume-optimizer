@@ -3,7 +3,7 @@ Auto-Editor router: AI-powered resume editing using LaTeX.
 LaTeX preserves ALL formatting perfectly!
 """
 import uuid
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from models.schemas import (
     AutoEditSuggestionsRequest,
     AutoEditSuggestionsResponse,
@@ -12,20 +12,26 @@ from models.schemas import (
     GeneratedResumeFile,
     EditSuggestion,
 )
-from services.gemini_service import generate_auto_edit_suggestions
+from services.llm_service import generate_auto_edit_suggestions
 from services.latex_service import apply_edits_to_latex, latex_to_pdf, latex_to_docx_simple
 from services.storage import get_analysis_by_id
 from core.supabase import get_supabase
 from core.config import settings
+from core.rate_limiter import limiter, get_rate_limit
+from core.logging_config import get_logger
 
 router = APIRouter(prefix="/api", tags=["auto-editor"])
+logger = get_logger("auto_editor")
 
 
 @router.post("/auto-edit-suggestions", response_model=AutoEditSuggestionsResponse)
-async def get_auto_edit_suggestions(req: AutoEditSuggestionsRequest):
+@limiter.limit(get_rate_limit("ai_light"))
+async def get_auto_edit_suggestions(request: Request, req: AutoEditSuggestionsRequest):
     """
     Generate AI-powered edit suggestions for a resume based on its analysis.
+    Rate Limited: 20 requests per hour per IP
     """
+    logger.info(f"Auto-edit suggestions requested for analysis {req.analysis_id[:8]}")
     try:
         # Fetch the analysis
         analysis = await get_analysis_by_id(req.analysis_id, req.user_id)
@@ -85,11 +91,14 @@ async def get_auto_edit_suggestions(req: AutoEditSuggestionsRequest):
 
 
 @router.post("/apply-edits", response_model=ApplyEditsResponse)
-async def apply_resume_edits(req: ApplyEditsRequest):
+@limiter.limit(get_rate_limit("ai_light"))
+async def apply_resume_edits(request: Request, req: ApplyEditsRequest):
     """
     Apply selected edit suggestions using LaTeX for perfect formatting preservation.
     Uses the original LaTeX code stored in the database.
+    Rate Limited: 20 requests per hour per IP
     """
+    logger.info(f"Applying {len(req.applied_suggestions)} edits for analysis {req.analysis_id[:8]}")
     try:
         print(f"⏳ Applying {len(req.applied_suggestions)} edits...")
         

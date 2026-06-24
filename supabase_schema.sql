@@ -13,11 +13,15 @@ create table if not exists public.resumes (
   user_id     uuid not null references auth.users(id) on delete cascade,
   file_url    text not null,
   parsed_text text not null,
+  latex_code  text,
   filename    text,
   created_at  timestamptz default now()
 );
 
 create index on public.resumes(user_id);
+
+-- If upgrading an existing database, add the latex_code column:
+alter table public.resumes add column if not exists latex_code text;
 
 -- ── Job Descriptions ─────────────────────────────────────────
 

@@ -6,6 +6,10 @@ import numpy as np
 from typing import List, Tuple
 from groq import Groq
 from core.config import settings
+from core.logging_config import get_logger
+from core.throttle import groq_throttle
+
+logger = get_logger("embeddings")
 
 
 def get_client() -> Groq:
@@ -38,6 +42,7 @@ def compute_cosine_similarity(vec1: List[float], vec2: List[float]) -> float:
     return max(0.0, min(1.0, float(similarity)))
 
 
+@groq_throttle
 async def generate_embedding(text: str, model: str = "text-embedding-ada-002") -> List[float]:
     """
     Generate embedding vector for text using OpenAI-compatible API.
@@ -46,6 +51,7 @@ async def generate_embedding(text: str, model: str = "text-embedding-ada-002") -
     a fallback approach with text chunking and LLM-based feature extraction.
     For production, you'd use OpenAI's embedding API or similar.
     """
+    logger.debug(f"Generating semantic embedding for text ({len(text)} chars)")
     # Truncate text to avoid token limits
     text = text[:8000]
     
@@ -87,6 +93,7 @@ Return ONLY a JSON array of 20 semantic features with weights 0-1:
             if match:
                 data = json.loads(match.group(0))
             else:
+                logger.warning("Failed to parse embedding response, returning zero vector")
                 return [0.0] * 128  # Return zero vector on error
         
         features = data.get("features", [])
@@ -103,11 +110,11 @@ Return ONLY a JSON array of 20 semantic features with weights 0-1:
             idx = hash_val % 128
             vector[idx] = max(vector[idx], weight)  # Take max if collision
         
-        print(f"✅ Generated semantic embedding (simplified approach)")
+        logger.info(f"✅ Generated semantic embedding (simplified approach, {len(features)} features)")
         return vector
         
     except Exception as e:
-        print(f"❌ Embedding generation failed: {type(e).__name__}: {e}")
+        logger.error(f"Embedding generation failed: {type(e).__name__}: {e}")
         # Return zero vector on error
         return [0.0] * 128
 
@@ -120,23 +127,34 @@ async def compute_semantic_similarity(resume_text: str, jd_text: str) -> Tuple[f
         - similarity score (0-100)
         - metadata dict with additional info
     """
-    # Generate embeddings for both texts
-    resume_embedding = await generate_embedding(resume_text)
-    jd_embedding = await generate_embedding(jd_text)
-    
-    # Compute cosine similarity
-    raw_similarity = compute_cosine_similarity(resume_embedding, jd_embedding)
-    
-    # Scale to 0-100
-    score = round(raw_similarity * 100, 1)
-    
-    metadata = {
-        "embedding_dimensions": len(resume_embedding),
-        "raw_similarity": round(raw_similarity, 4),
-        "interpretation": _interpret_score(score),
-    }
-    
-    return score, metadata
+    logger.info("Computing semantic similarity between resume and JD")
+    try:
+        # Generate embeddings for both texts
+        resume_embedding = await generate_embedding(resume_text)
+        jd_embedding = await generate_embedding(jd_text)
+        
+        # Compute cosine similarity
+        raw_similarity = compute_cosine_similarity(resume_embedding, jd_embedding)
+        
+        # Scale to 0-100
+        score = round(raw_similarity * 100, 1)
+        
+        metadata = {
+            "embedding_dimensions": len(resume_embedding),
+            "raw_similarity": round(raw_similarity, 4),
+            "interpretation": _interpret_score(score),
+        }
+        
+        logger.info(f"✅ Semantic similarity computed: {score}% (interpretation: {metadata['interpretation'][:50]}...)")
+        return score, metadata
+    except Exception as e:
+        logger.error(f"Semantic similarity computation failed: {type(e).__name__}: {e}")
+        # Return fallback score
+        return 50.0, {
+            "embedding_dimensions": 128,
+            "raw_similarity": 0.5,
+            "interpretation": "Unable to compute semantic similarity at this time",
+        }
 
 
 def _interpret_score(score: float) -> str:

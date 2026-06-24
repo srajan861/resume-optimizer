@@ -1,13 +1,22 @@
+"""
+LLM service: All AI/LLM operations using Groq API.
+Handles recruiter simulation, content generation, analysis, and suggestions.
+Uses Llama 3.3 70B via Groq for fast, cost-effective inference.
+"""
 import json
 import re
 from typing import List, Optional
 from groq import Groq
 from core.config import settings
+from core.logging_config import get_logger
+from core.throttle import groq_throttle
 from models.schemas import (
     RecruiterFeedback, RewrittenBullet, JDIntelligence,
     SkillGapRoadmap, SkillGapItem,
     StrengthBreakdown, StrengthMetric,
 )
+
+logger = get_logger("llm_service")
 ROLE_CONTEXT = {
     "sde": "Software Development Engineer (SDE) role focusing on system design, coding, and software architecture",
     "ml": "Machine Learning Engineer role focusing on ML systems, model development, and data pipelines",
@@ -66,6 +75,22 @@ MODEL = "llama-3.3-70b-versatile"
 
 def get_client() -> Groq:
     return Groq(api_key=settings.GROQ_API_KEY)
+
+
+@groq_throttle
+async def _call_groq_api(prompt: str, model: str = MODEL, temperature: float = 0.3, max_tokens: int = 1024) -> str:
+    """
+    Throttled Groq API call wrapper.
+    This function is rate-limited globally to prevent exceeding Groq's 30 RPM limit.
+    """
+    client = get_client()
+    response = client.chat.completions.create(
+        model=model,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+    return response.choices[0].message.content or ""
 
 
 def _extract_json(text: str) -> dict:
@@ -127,15 +152,8 @@ You MUST respond with ONLY a valid JSON object. No explanation, no markdown, jus
 }}"""
 
     try:
-        client = get_client()
-        response = client.chat.completions.create(
-            model=MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3,
-            max_tokens=1024,
-        )
-        raw = response.choices[0].message.content or ""
-        print(f"✅ Groq recruiter response received (persona={persona})")
+        raw = await _call_groq_api(prompt, temperature=0.3, max_tokens=1024)
+        logger.info(f"✅ Groq recruiter response received (persona={persona})")
         data = _extract_json(raw)
 
         return RecruiterFeedback(
@@ -146,7 +164,7 @@ You MUST respond with ONLY a valid JSON object. No explanation, no markdown, jus
             persona=persona,
         )
     except Exception as e:
-        print(f"❌ Groq recruiter simulation failed: {type(e).__name__}: {e}")
+        logger.error(f"Groq recruiter simulation failed: {type(e).__name__}: {e}")
         return RecruiterFeedback(
             score=5.0,
             strengths=["Resume submitted for review"],
@@ -203,14 +221,7 @@ Respond ONLY with valid JSON — no markdown, no explanation:
 }}"""
 
     try:
-        client = get_client()
-        response = client.chat.completions.create(
-            model=MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.4,
-            max_tokens=1024,
-        )
-        raw = response.choices[0].message.content or ""
+        raw = await _call_groq_api(prompt, temperature=0.4, max_tokens=1024)
         data = _extract_json(raw)
         rewrites = data.get("rewrites", [])
 
@@ -221,7 +232,7 @@ Respond ONLY with valid JSON — no markdown, no explanation:
 
         return result
     except Exception as e:
-        print(f"❌ Groq rewrite failed: {type(e).__name__}: {e}")
+        logger.error(f"Groq rewrite failed: {type(e).__name__}: {e}")
         return [RewrittenBullet(original=b, improved=b) for b in bullets]
 
 
@@ -275,23 +286,17 @@ Requirements for the cover letter:
 - Output ONLY the cover letter body text. No preamble, no markdown headers, no explanation."""
 
     try:
-        client = get_client()
-        response = client.chat.completions.create(
-            model=MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.6,
-            max_tokens=1024,
-        )
-        letter = (response.choices[0].message.content or "").strip()
+        raw = await _call_groq_api(prompt, temperature=0.6, max_tokens=1024)
+        letter = raw.strip()
         # Strip any accidental markdown code fences
         letter = re.sub(r"^```(?:\w+)?\n?", "", letter)
         letter = re.sub(r"\n?```$", "", letter).strip()
-        print(f"✅ Groq cover letter generated (tone={tone})")
+        logger.info(f"✅ Groq cover letter generated (tone={tone}, {len(letter)} chars)")
         if not letter:
             raise ValueError("Empty cover letter returned")
         return letter
     except Exception as e:
-        print(f"❌ Groq cover letter generation failed: {type(e).__name__}: {e}")
+        logger.error(f"Groq cover letter generation failed: {type(e).__name__}: {e}")
         raise
 
 
@@ -318,15 +323,8 @@ Respond with ONLY a valid JSON object. No markdown, no explanation, just raw JSO
 }}"""
 
     try:
-        client = get_client()
-        response = client.chat.completions.create(
-            model=MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.2,
-            max_tokens=1024,
-        )
-        raw = response.choices[0].message.content or ""
-        print("✅ Groq JD intelligence extracted")
+        raw = await _call_groq_api(prompt, temperature=0.2, max_tokens=1024)
+        logger.info("✅ Groq JD intelligence extracted")
         data = _extract_json(raw)
 
         return JDIntelligence(
@@ -338,7 +336,7 @@ Respond with ONLY a valid JSON object. No markdown, no explanation, just raw JSO
             education=str(data.get("education", "")).strip(),
         )
     except Exception as e:
-        print(f"❌ Groq JD intelligence extraction failed: {type(e).__name__}: {e}")
+        logger.error(f"Groq JD intelligence extraction failed: {type(e).__name__}: {e}")
         return JDIntelligence(
             role_summary="",
             required_skills=[],
@@ -406,15 +404,8 @@ Respond with ONLY a valid JSON object. No markdown, no explanation, just raw JSO
 }}"""
 
     try:
-        client = get_client()
-        response = client.chat.completions.create(
-            model=MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3,
-            max_tokens=1600,
-        )
-        raw = response.choices[0].message.content or ""
-        print("✅ Groq skill gap roadmap generated")
+        raw = await _call_groq_api(prompt, temperature=0.3, max_tokens=1600)
+        logger.info("✅ Groq skill gap roadmap generated")
         data = _extract_json(raw)
 
         missing_items: List[SkillGapItem] = []
@@ -445,7 +436,7 @@ Respond with ONLY a valid JSON object. No markdown, no explanation, just raw JSO
             missing_skills=missing_items,
         )
     except Exception as e:
-        print(f"❌ Groq skill gap roadmap failed: {type(e).__name__}: {e}")
+        logger.error(f"Groq skill gap roadmap failed: {type(e).__name__}: {e}")
         raise
 
 
@@ -504,15 +495,8 @@ Respond with ONLY a valid JSON object. No markdown, no explanation, just raw JSO
 }}"""
 
     try:
-        client = get_client()
-        response = client.chat.completions.create(
-            model=MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.2,
-            max_tokens=1024,
-        )
-        raw = response.choices[0].message.content or ""
-        print("✅ Groq strength breakdown generated")
+        raw = await _call_groq_api(prompt, temperature=0.2, max_tokens=1024)
+        logger.info("✅ Groq strength breakdown generated")
         data = _extract_json(raw)
 
         metrics = {}
@@ -529,7 +513,7 @@ Respond with ONLY a valid JSON object. No markdown, no explanation, just raw JSO
 
         return StrengthBreakdown(overall=overall, **metrics)
     except Exception as e:
-        print(f"❌ Groq strength breakdown failed: {type(e).__name__}: {e}")
+        logger.error(f"Groq strength breakdown failed: {type(e).__name__}: {e}")
         return StrengthBreakdown()
 
 
@@ -603,15 +587,8 @@ Respond with ONLY a valid JSON object. No markdown, no explanation:
 }}"""
 
     try:
-        client = get_client()
-        response = client.chat.completions.create(
-            model=MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.4,
-            max_tokens=2048,
-        )
-        raw = response.choices[0].message.content or ""
-        print("✅ Groq auto-edit suggestions generated")
+        raw = await _call_groq_api(prompt, temperature=0.4, max_tokens=2048)
+        logger.info("✅ Groq auto-edit suggestions generated")
         data = _extract_json(raw)
 
         summary = str(data.get("summary", "")).strip()
@@ -643,6 +620,6 @@ Respond with ONLY a valid JSON object. No markdown, no explanation:
 
         return suggestions, summary
     except Exception as e:
-        print(f"❌ Groq auto-edit suggestions failed: {type(e).__name__}: {e}")
+        logger.error(f"Groq auto-edit suggestions failed: {type(e).__name__}: {e}")
         # Return safe fallback
         return [], "Unable to generate suggestions at this time. Please try again."

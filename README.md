@@ -113,7 +113,7 @@ resume-optimizer/
 │   └── services/
 │       ├── parser.py                  # PDF/DOCX text extraction and section parsing
 │       ├── ats_engine.py              # ATS keyword scoring + live-feedback heuristics
-│       ├── gemini_service.py          # Groq LLM: all AI feature functions
+│       ├── llm_service.py             # Groq LLM: all AI feature functions (Llama 3.3 70B)
 │       └── storage.py                 # Supabase database operations
 │
 ├── supabase_schema.sql                # Full database schema, migrations, and RLS policies
@@ -135,8 +135,6 @@ resume-optimizer/
 | **AI / LLM** | Groq API — Llama 3.3 70B | All AI-driven analyses |
 | **Frontend Deploy** | Vercel | Static SPA hosting |
 | **Backend Deploy** | Render | Python web service hosting |
-
-> **Note:** The AI service module is named `gemini_service.py` for historical reasons but uses the **Groq API** exclusively.
 
 ---
 
@@ -545,6 +543,20 @@ MAX_FILE_SIZE_MB    = 10
 
 ---
 
+
+## 📚 Documentation
+
+Additional documentation files are available in the [`docs/`](./docs) directory:
+
+| Document | Description |
+|----------|-------------|
+| **[Quick Reference Guide](./docs/QUICK_REFERENCE.md)** | Quick setup commands, rate limits, key file locations, troubleshooting tips, and common tasks for development and deployment |
+| **[Security & Logging Guide](./docs/SECURITY_AND_LOGGING.md)** | Comprehensive overview of security features (rate limiting, throttling, input validation), structured logging system, error handling, and production deployment checklist |
+| **[Groq API & Rate Limiting](./docs/GROQ_API_RATE_LIMITING.md)** | Complete guide to Groq LLM integration, rate limiting implementation, throttling system, how they work together, monitoring metrics, and troubleshooting |
+
+These guides complement the main README by providing operational details for developers and system administrators.
+
+---
 
 ## 📄 License
 

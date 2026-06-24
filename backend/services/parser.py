@@ -5,6 +5,9 @@ from fastapi import UploadFile, HTTPException
 import pdfplumber
 from docx import Document
 from models.schemas import ParsedResume
+from core.logging_config import get_logger
+
+logger = get_logger("parser")
 
 
 SKILL_KEYWORDS = {
@@ -30,12 +33,15 @@ async def extract_text_from_file(file: UploadFile) -> str:
     """Extract raw text from uploaded PDF or DOCX."""
     content = await file.read()
     filename = file.filename or ""
+    
+    logger.info(f"Extracting text from file: {filename} ({len(content)} bytes)")
 
     if filename.lower().endswith(".pdf"):
         return _extract_pdf(content)
     elif filename.lower().endswith(".docx"):
         return _extract_docx(content)
     else:
+        logger.warning(f"Unsupported file type: {filename}")
         raise HTTPException(
             status_code=400,
             detail="Unsupported file type. Please upload PDF or DOCX."
@@ -45,6 +51,7 @@ async def extract_text_from_file(file: UploadFile) -> str:
 def _extract_pdf(content: bytes) -> str:
     """Extract text from PDF bytes."""
     try:
+        logger.debug(f"Extracting text from PDF ({len(content)} bytes)")
         text_parts = []
         with pdfplumber.open(io.BytesIO(content)) as pdf:
             for page in pdf.pages:
@@ -65,17 +72,22 @@ def _extract_pdf(content: bytes) -> str:
         raw = _re.sub(r' {2,}', ' ', raw)
 
         if not raw:
+            logger.warning("PDF appears to be empty or image-based")
             raise HTTPException(status_code=422, detail="PDF appears to be empty or image-based (no extractable text).")
+        
+        logger.info(f"✅ PDF text extracted: {len(raw)} characters")
         return raw
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Failed to parse PDF: {type(e).__name__}: {e}")
         raise HTTPException(status_code=422, detail=f"Failed to parse PDF: {str(e)}")
 
 
 def _extract_docx(content: bytes) -> str:
     """Extract text from DOCX bytes."""
     try:
+        logger.debug(f"Extracting text from DOCX ({len(content)} bytes)")
         doc = Document(io.BytesIO(content))
         paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
         # Also extract from tables
@@ -86,16 +98,21 @@ def _extract_docx(content: bytes) -> str:
                         paragraphs.append(cell.text.strip())
         raw = "\n".join(paragraphs).strip()
         if not raw:
+            logger.warning("DOCX appears to be empty")
             raise HTTPException(status_code=422, detail="DOCX appears to be empty.")
+        
+        logger.info(f"✅ DOCX text extracted: {len(raw)} characters")
         return raw
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Failed to parse DOCX: {type(e).__name__}: {e}")
         raise HTTPException(status_code=422, detail=f"Failed to parse DOCX: {str(e)}")
 
 
 def parse_resume_sections(raw_text: str) -> ParsedResume:
     """Parse raw resume text into structured sections."""
+    logger.debug(f"Parsing resume sections from text ({len(raw_text)} chars)")
     text_lower = raw_text.lower()
 
     # Extract skills via keyword matching
@@ -130,6 +147,8 @@ def parse_resume_sections(raw_text: str) -> ParsedResume:
     projects = list(set(
         m.group(0).strip() for m in project_pattern.finditer(raw_text)
     ))[:8]
+    
+    logger.info(f"✅ Parsed resume: {len(found_skills)} skills, {len(bullets)} bullets, {len(experience)} experience entries")
 
     return ParsedResume(
         raw_text=raw_text,

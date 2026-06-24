@@ -11,3 +11,4 @@ python-jose[cryptography]==3.3.0
 groq==0.11.0
 numpy==2.1.3
 reportlab==4.0.9
+slowapi==0.1.9

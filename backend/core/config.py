@@ -8,16 +8,26 @@ from typing import List
 
 
 class Settings(BaseSettings):
+    # Supabase
     SUPABASE_URL: str = ""
     SUPABASE_SERVICE_KEY: str = ""
     SUPABASE_BUCKET: str = "resumes"
+    
+    # AI Services
     GROQ_API_KEY: str = ""
+    
+    # CORS
     ALLOWED_ORIGINS: List[str] = [
         "http://localhost:5173",
         "http://localhost:3000",
         "https://your-app.vercel.app",
     ]
+    
+    # File Upload
     MAX_FILE_SIZE_MB: int = 10
+    
+    # Environment
+    DEBUG: bool = True  # Set to False in production
 
     class Config:
         env_file = os.path.join(os.path.dirname(__file__), '..', '.env')
