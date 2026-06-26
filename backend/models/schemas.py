@@ -1,7 +1,8 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Optional, List, Any
 from datetime import datetime
 import uuid
+import re
 
 
 # ── Resume ──────────────────────────────────────────────────────────────────
@@ -24,18 +25,61 @@ class ParsedResume(BaseModel):
 # ── Job Description ──────────────────────────────────────────────────────────
 
 class JobDescriptionInput(BaseModel):
-    content: str = Field(..., min_length=50, description="Full job description text")
+    content: str = Field(..., min_length=50, max_length=50000, description="Full job description text")
     # user_id removed - obtained from JWT token
+    
+    @field_validator('content')
+    @classmethod
+    def validate_content(cls, v: str) -> str:
+        """Validate job description content."""
+        if not v or not v.strip():
+            raise ValueError("Job description cannot be empty")
+        
+        # Check for minimum alphanumeric content
+        alphanumeric_count = sum(c.isalnum() for c in v)
+        if alphanumeric_count < 30:
+            raise ValueError("Job description must contain at least 30 alphanumeric characters")
+        
+        return v.strip()
 
 
 # ── Analysis ─────────────────────────────────────────────────────────────────
 
 class AnalyzeRequest(BaseModel):
-    resume_id: str
-    job_description: str
+    resume_id: str = Field(..., min_length=1, max_length=100)
+    job_description: str = Field(..., min_length=50, max_length=50000)
     # user_id removed - obtained from JWT token
-    role_type: Optional[str] = "general"  # sde | ml | analyst | general
-    persona: Optional[str] = "standard"  # standard | faang | startup | hr
+    role_type: Optional[str] = Field(default="general", pattern="^(sde|ml|analyst|general)$")
+    persona: Optional[str] = Field(default="standard", pattern="^(standard|faang|startup|hr)$")
+    
+    @field_validator('resume_id')
+    @classmethod
+    def validate_resume_id(cls, v: str) -> str:
+        """Validate resume ID format."""
+        if not v or not v.strip():
+            raise ValueError("Resume ID is required")
+        
+        # Validate UUID format
+        try:
+            uuid.UUID(v.strip())
+        except ValueError:
+            raise ValueError("Invalid resume ID format")
+        
+        return v.strip()
+    
+    @field_validator('job_description')
+    @classmethod
+    def validate_jd(cls, v: str) -> str:
+        """Validate job description."""
+        if not v or not v.strip():
+            raise ValueError("Job description is required")
+        
+        # Check for minimum alphanumeric content
+        alphanumeric_count = sum(c.isalnum() for c in v)
+        if alphanumeric_count < 30:
+            raise ValueError("Job description must contain sufficient readable content")
+        
+        return v.strip()
 
 
 class ATSResult(BaseModel):
@@ -117,8 +161,31 @@ class SemanticMatchResponse(BaseModel):
 # ── Rewrite ──────────────────────────────────────────────────────────────────
 
 class RewriteRequest(BaseModel):
-    bullet_points: List[str]
-    job_context: Optional[str] = ""
+    bullet_points: List[str] = Field(..., min_length=1, max_length=20)
+    job_context: Optional[str] = Field(default="", max_length=10000)
+    
+    @field_validator('bullet_points')
+    @classmethod
+    def validate_bullets(cls, v: List[str]) -> List[str]:
+        """Validate bullet points."""
+        if not v:
+            raise ValueError("At least one bullet point is required")
+        
+        if len(v) > 20:
+            raise ValueError("Maximum 20 bullet points allowed")
+        
+        # Validate each bullet point
+        validated = []
+        for i, bullet in enumerate(v):
+            if not bullet or not bullet.strip():
+                raise ValueError(f"Bullet point {i+1} is empty")
+            
+            if len(bullet) > 1000:
+                raise ValueError(f"Bullet point {i+1} is too long (max 1000 characters)")
+            
+            validated.append(bullet.strip())
+        
+        return validated
 
 
 class RewriteResponse(BaseModel):
@@ -128,8 +195,16 @@ class RewriteResponse(BaseModel):
 # ── Live Feedback (Real-Time Editing) ────────────────────────────────────────
 
 class LiveFeedbackRequest(BaseModel):
-    resume_text: str = ""
-    job_description: str = ""
+    resume_text: str = Field(default="", max_length=100000)
+    job_description: str = Field(default="", max_length=50000)
+    
+    @field_validator('resume_text', 'job_description')
+    @classmethod
+    def validate_text(cls, v: str) -> str:
+        """Validate text fields."""
+        if v and len(v) > 100000:
+            raise ValueError("Text is too long")
+        return v.strip() if v else ""
 
 
 class LiveTip(BaseModel):
@@ -151,12 +226,41 @@ class LiveFeedbackResponse(BaseModel):
 # ── Cover Letter ─────────────────────────────────────────────────────────────
 
 class CoverLetterRequest(BaseModel):
-    analysis_id: str
+    analysis_id: str = Field(..., min_length=1, max_length=100)
     # user_id removed - obtained from JWT token
-    tone: Optional[str] = "professional"  # professional | enthusiastic | concise
-    applicant_name: Optional[str] = ""
-    company_name: Optional[str] = ""
-    role_title: Optional[str] = ""
+    tone: Optional[str] = Field(default="professional", pattern="^(professional|enthusiastic|concise)$")
+    applicant_name: Optional[str] = Field(default="", max_length=100)
+    company_name: Optional[str] = Field(default="", max_length=200)
+    role_title: Optional[str] = Field(default="", max_length=200)
+    
+    @field_validator('analysis_id')
+    @classmethod
+    def validate_analysis_id(cls, v: str) -> str:
+        """Validate analysis ID format."""
+        if not v or not v.strip():
+            raise ValueError("Analysis ID is required")
+        
+        try:
+            uuid.UUID(v.strip())
+        except ValueError:
+            raise ValueError("Invalid analysis ID format")
+        
+        return v.strip()
+    
+    @field_validator('applicant_name', 'company_name', 'role_title')
+    @classmethod
+    def validate_string_fields(cls, v: Optional[str]) -> str:
+        """Validate string fields."""
+        if not v:
+            return ""
+        
+        # Remove potentially dangerous characters
+        v = v.strip()
+        
+        # Remove control characters
+        v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
+        
+        return v
 
 
 class CoverLetterResponse(BaseModel):
@@ -167,8 +271,22 @@ class CoverLetterResponse(BaseModel):
 # ── Skill Gap Roadmap ────────────────────────────────────────────────────────
 
 class SkillGapRequest(BaseModel):
-    analysis_id: str
+    analysis_id: str = Field(..., min_length=1, max_length=100)
     # user_id removed - obtained from JWT token
+    
+    @field_validator('analysis_id')
+    @classmethod
+    def validate_analysis_id(cls, v: str) -> str:
+        """Validate analysis ID format."""
+        if not v or not v.strip():
+            raise ValueError("Analysis ID is required")
+        
+        try:
+            uuid.UUID(v.strip())
+        except ValueError:
+            raise ValueError("Invalid analysis ID format")
+        
+        return v.strip()
 
 
 class SkillGapItem(BaseModel):
@@ -206,7 +324,19 @@ class RedFlagReport(BaseModel):
 
 
 class RedFlagRequest(BaseModel):
-    resume_text: str
+    resume_text: str = Field(..., min_length=50, max_length=100000)
+    
+    @field_validator('resume_text')
+    @classmethod
+    def validate_resume_text(cls, v: str) -> str:
+        """Validate resume text."""
+        if not v or not v.strip():
+            raise ValueError("Resume text is required")
+        
+        if len(v.strip()) < 50:
+            raise ValueError("Resume text is too short (minimum 50 characters)")
+        
+        return v.strip()
 
 
 class RedFlagResponse(BaseModel):
@@ -238,9 +368,23 @@ class EvolutionResponse(BaseModel):
 
 
 class VersionCompareRequest(BaseModel):
-    version1_id: str
-    version2_id: str
+    version1_id: str = Field(..., min_length=1, max_length=100)
+    version2_id: str = Field(..., min_length=1, max_length=100)
     # user_id removed - obtained from JWT token
+    
+    @field_validator('version1_id', 'version2_id')
+    @classmethod
+    def validate_version_ids(cls, v: str) -> str:
+        """Validate version ID format."""
+        if not v or not v.strip():
+            raise ValueError("Version ID is required")
+        
+        try:
+            uuid.UUID(v.strip())
+        except ValueError:
+            raise ValueError("Invalid version ID format")
+        
+        return v.strip()
 
 
 class VersionComparison(BaseModel):
@@ -297,9 +441,23 @@ class EditSuggestion(BaseModel):
 
 
 class AutoEditSuggestionsRequest(BaseModel):
-    analysis_id: str
+    analysis_id: str = Field(..., min_length=1, max_length=100)
     # user_id removed - obtained from JWT token
-    max_suggestions: Optional[int] = 10
+    max_suggestions: Optional[int] = Field(default=10, ge=1, le=50)
+    
+    @field_validator('analysis_id')
+    @classmethod
+    def validate_analysis_id(cls, v: str) -> str:
+        """Validate analysis ID format."""
+        if not v or not v.strip():
+            raise ValueError("Analysis ID is required")
+        
+        try:
+            uuid.UUID(v.strip())
+        except ValueError:
+            raise ValueError("Invalid analysis ID format")
+        
+        return v.strip()
 
 
 class AutoEditSuggestionsResponse(BaseModel):
@@ -309,11 +467,49 @@ class AutoEditSuggestionsResponse(BaseModel):
 
 
 class ApplyEditsRequest(BaseModel):
-    analysis_id: str  # To fetch the original LaTeX code
-    resume_text: str
-    applied_suggestions: List[EditSuggestion]
-    format: str = "both"  # pdf | docx | both
+    analysis_id: str = Field(..., min_length=1, max_length=100)
+    resume_text: str = Field(..., min_length=100, max_length=100000)
+    applied_suggestions: List[EditSuggestion] = Field(..., max_length=50)
+    format: str = Field(default="both", pattern="^(pdf|docx|both)$")
     # user_id removed - obtained from JWT token
+    
+    @field_validator('analysis_id')
+    @classmethod
+    def validate_analysis_id(cls, v: str) -> str:
+        """Validate analysis ID format."""
+        if not v or not v.strip():
+            raise ValueError("Analysis ID is required")
+        
+        try:
+            uuid.UUID(v.strip())
+        except ValueError:
+            raise ValueError("Invalid analysis ID format")
+        
+        return v.strip()
+    
+    @field_validator('resume_text')
+    @classmethod
+    def validate_resume_text(cls, v: str) -> str:
+        """Validate resume text."""
+        if not v or not v.strip():
+            raise ValueError("Resume text is required")
+        
+        if len(v.strip()) < 100:
+            raise ValueError("Resume text is too short")
+        
+        return v.strip()
+    
+    @field_validator('applied_suggestions')
+    @classmethod
+    def validate_suggestions(cls, v: List[EditSuggestion]) -> List[EditSuggestion]:
+        """Validate applied suggestions."""
+        if not v:
+            raise ValueError("At least one suggestion must be applied")
+        
+        if len(v) > 50:
+            raise ValueError("Too many suggestions (maximum 50)")
+        
+        return v
 
 
 class GeneratedResumeFile(BaseModel):

@@ -43,17 +43,33 @@ async def analyze_resume(
     5. Store and return results
     
     🔒 Requires authentication: JWT token in Authorization header
+    ✅ Input validation: All inputs validated and sanitized
     Rate Limited: 8 analyses per hour per IP
     """
     logger.info(f"Analysis started for resume {req.resume_id[:8]} by user {current_user[:8]}")
     
     try:
-        # Validate JD length
-        validate_text_length(req.job_description, 10000, "Job description")
+        # Additional validation beyond Pydantic
+        from core.security import (
+            validate_uuid,
+            validate_job_description,
+            validate_no_code_injection
+        )
+        
+        # Validate resume ID (UUID format)
+        resume_id = validate_uuid(req.resume_id, "Resume ID")
+        
+        # Validate and sanitize job description
+        job_description = validate_job_description(req.job_description)
+        
+        # Check for code injection attempts
+        validate_no_code_injection(job_description, "Job description")
+        
+        logger.info(f"Input validation passed for resume {resume_id[:8]}")
         
         # Fetch resume text - validates ownership
         logger.info("Fetching resume text...")
-        resume_text = await get_resume_text(req.resume_id, current_user)
+        resume_text = await get_resume_text(resume_id, current_user)
         
         # Parse for bullet points
         parsed = parse_resume_sections(resume_text)
@@ -62,24 +78,24 @@ async def analyze_resume(
         # Run ATS + Recruiter simulation concurrently
         logger.info("Running parallel analysis tasks...")
         ats_task = asyncio.create_task(
-            asyncio.to_thread(compute_ats_score, resume_text, req.job_description)
+            asyncio.to_thread(compute_ats_score, resume_text, job_description)
         )
         recruiter_task = asyncio.create_task(
             simulate_recruiter(
                 resume_text,
-                req.job_description,
+                job_description,
                 req.role_type or "general",
                 req.persona or "standard",
             )
         )
         jd_intel_task = asyncio.create_task(
-            extract_jd_intelligence(req.job_description)
+            extract_jd_intelligence(job_description)
         )
         strength_task = asyncio.create_task(
-            analyze_strength_breakdown(resume_text, req.job_description)
+            analyze_strength_breakdown(resume_text, job_description)
         )
         semantic_task = asyncio.create_task(
-            compute_semantic_similarity(resume_text, req.job_description)
+            compute_semantic_similarity(resume_text, job_description)
         )
 
         ats_result, recruiter_feedback, jd_intelligence, strength_breakdown, (semantic_score, semantic_meta) = await asyncio.gather(
@@ -91,7 +107,7 @@ async def analyze_resume(
         # Rewrite top bullet points
         bullets_to_rewrite = parsed.bullet_points[:8]  # Top 8 bullets
         logger.info(f"Rewriting {len(bullets_to_rewrite)} bullet points...")
-        rewritten = await rewrite_bullet_points(bullets_to_rewrite, req.job_description[:500])
+        rewritten = await rewrite_bullet_points(bullets_to_rewrite, job_description[:500])
         
         # Build semantic match result
         from models.schemas import SemanticMatch
@@ -108,8 +124,8 @@ async def analyze_resume(
         logger.info("Saving analysis to database...")
         analysis_id = await save_analysis(
             user_id=current_user,
-            resume_id=req.resume_id,
-            jd_content=req.job_description,
+            resume_id=resume_id,
+            jd_content=job_description,
             ats_score=ats_result.score,
             recruiter_score=recruiter_feedback.score,
             ats_data=ats_result.model_dump(),
@@ -146,12 +162,20 @@ async def analyze_resume(
 
 @router.post("/rewrite", response_model=RewriteResponse)
 async def rewrite_bullets(req: RewriteRequest):
-    """Standalone endpoint to rewrite resume bullet points."""
-    if not req.bullet_points:
-        raise HTTPException(status_code=400, detail="No bullet points provided")
+    """
+    Standalone endpoint to rewrite resume bullet points.
     
-    if len(req.bullet_points) > 20:
-        raise HTTPException(status_code=400, detail="Maximum 20 bullet points per request")
+    ✅ Input validation: Validates bullet points and context
+    """
+    # Pydantic validators handle most validation
+    # Additional check for code injection
+    from core.security import validate_no_code_injection
+    
+    if req.job_context:
+        validate_no_code_injection(req.job_context, "Job context")
+    
+    for i, bullet in enumerate(req.bullet_points):
+        validate_no_code_injection(bullet, f"Bullet point {i+1}")
     
     rewritten = await rewrite_bullet_points(req.bullet_points, req.job_context or "")
     return RewriteResponse(rewritten=rewritten)
@@ -179,12 +203,26 @@ async def create_cover_letter(
     Generate a tailored cover letter from a stored analysis.
     
     🔒 Requires authentication
+    ✅ Input validation: UUID, text sanitization
     Rate Limited: 15 generations per hour per IP
     """
     logger.info(f"Cover letter generation started for analysis {req.analysis_id[:8]}")
     
     try:
-        result = await get_analysis_by_id(req.analysis_id, current_user)
+        from core.security import validate_uuid, validate_no_code_injection
+        
+        # Validate analysis ID
+        analysis_id = validate_uuid(req.analysis_id, "Analysis ID")
+        
+        # Validate optional text fields for code injection
+        if req.applicant_name:
+            validate_no_code_injection(req.applicant_name, "Applicant name")
+        if req.company_name:
+            validate_no_code_injection(req.company_name, "Company name")
+        if req.role_title:
+            validate_no_code_injection(req.role_title, "Role title")
+        
+        result = await get_analysis_by_id(analysis_id, current_user)
         if not result:
             raise HTTPException(status_code=404, detail="Analysis not found")
 
@@ -232,12 +270,18 @@ async def create_skill_gap_roadmap(
     Generate a skill-gap learning roadmap from a stored analysis.
     
     🔒 Requires authentication
+    ✅ Input validation: UUID validation
     Rate Limited: 15 generations per hour per IP
     """
     logger.info(f"Skill gap roadmap generation started for analysis {req.analysis_id[:8]}")
     
     try:
-        result = await get_analysis_by_id(req.analysis_id, current_user)
+        from core.security import validate_uuid
+        
+        # Validate analysis ID
+        analysis_id = validate_uuid(req.analysis_id, "Analysis ID")
+        
+        result = await get_analysis_by_id(analysis_id, current_user)
         if not result:
             raise HTTPException(status_code=404, detail="Analysis not found")
 
@@ -287,7 +331,13 @@ async def get_analysis(
     Fetch a specific analysis by ID.
     
     🔒 Requires authentication
+    ✅ Input validation: UUID validation
     """
+    from core.security import validate_uuid
+    
+    # Validate analysis ID
+    analysis_id = validate_uuid(analysis_id, "Analysis ID")
+    
     result = await get_analysis_by_id(analysis_id, current_user)
     if not result:
         raise HTTPException(status_code=404, detail="Analysis not found")
@@ -326,6 +376,8 @@ async def analyze_red_flags(req: RedFlagRequest):
     """
     Detect resume red flags that recruiters dislike.
     
+    ✅ Input validation: Text length and content validation
+    
     Checks for:
     - Overused buzzwords (synergy, leverage, etc.)
     - Lack of metrics and numbers
@@ -336,8 +388,11 @@ async def analyze_red_flags(req: RedFlagRequest):
     
     Returns categorized warnings with severity levels.
     """
-    if not req.resume_text or len(req.resume_text.strip()) < 50:
-        raise HTTPException(status_code=400, detail="Resume text is too short to analyze")
+    # Pydantic validator handles basic validation
+    from core.security import validate_no_code_injection
+    
+    # Check for code injection
+    validate_no_code_injection(req.resume_text, "Resume text")
     
     report = await asyncio.to_thread(detect_red_flags, req.resume_text)
     return RedFlagResponse(report=report)

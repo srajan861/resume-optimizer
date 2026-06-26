@@ -36,12 +36,18 @@ async def get_auto_edit_suggestions(
     Generate AI-powered edit suggestions for a resume based on its analysis.
     
     🔒 Requires authentication
+    ✅ Input validation: UUID validation
     Rate Limited: 20 requests per hour per IP
     """
     logger.info(f"Auto-edit suggestions requested for analysis {req.analysis_id[:8]}")
     try:
+        from core.security import validate_uuid
+        
+        # Validate analysis ID
+        analysis_id = validate_uuid(req.analysis_id, "Analysis ID")
+        
         # Fetch the analysis - validates ownership
-        analysis = await get_analysis_by_id(req.analysis_id, current_user)
+        analysis = await get_analysis_by_id(analysis_id, current_user)
         if not analysis:
             raise HTTPException(status_code=404, detail="Analysis not found")
         
@@ -109,14 +115,26 @@ async def apply_resume_edits(
     Uses the original LaTeX code stored in the database.
     
     🔒 Requires authentication
+    ✅ Input validation: UUID, text sanitization, list length
     Rate Limited: 20 requests per hour per IP
     """
     logger.info(f"Applying {len(req.applied_suggestions)} edits for analysis {req.analysis_id[:8]}")
     try:
+        from core.security import validate_uuid, validate_resume_text, validate_no_code_injection
+        
+        # Validate analysis ID
+        analysis_id = validate_uuid(req.analysis_id, "Analysis ID")
+        
+        # Validate resume text
+        resume_text = validate_resume_text(req.resume_text)
+        
+        # Check for code injection in resume text
+        validate_no_code_injection(resume_text, "Resume text")
+        
         print(f"⏳ Applying {len(req.applied_suggestions)} edits...")
         
         # Fetch the analysis to get the original LaTeX code - validates ownership
-        analysis = await get_analysis_by_id(req.analysis_id, current_user)
+        analysis = await get_analysis_by_id(analysis_id, current_user)
         if not analysis:
             raise HTTPException(status_code=404, detail="Analysis not found")
         
@@ -126,7 +144,7 @@ async def apply_resume_edits(
         if not latex_code:
             print("⚠️ No LaTeX code in database, generating from resume text...")
             from services.latex_service import resume_to_latex
-            latex_code = await resume_to_latex(req.resume_text)
+            latex_code = await resume_to_latex(resume_text)
         else:
             print(f"✅ Using stored LaTeX code ({len(latex_code)} chars)")
         
