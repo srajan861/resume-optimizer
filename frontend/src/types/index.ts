@@ -45,13 +45,25 @@ export interface StrengthBreakdown {
   overall: number
 }
 
+export interface SemanticMatch {
+  score: number
+  interpretation: string
+  embedding_dimensions: number
+  raw_similarity: number
+  keyword_score: number
+  score_difference: number
+}
+
 export interface AnalysisResult {
   analysis_id: string
+  resume_id?: string
   ats: ATSResult
   recruiter: RecruiterFeedback
   rewritten_bullets: RewrittenBullet[]
   jd_intelligence?: JDIntelligence | null
   strength_breakdown?: StrengthBreakdown | null
+  semantic_match?: SemanticMatch | null
+  resume_text?: string
   created_at: string
 }
 
@@ -141,6 +153,73 @@ export interface LiveFeedbackResponse {
   tips: LiveTip[]
 }
 
+// ── Red Flag Detection ────────────────────────────────────────────────────────
+
+export type RedFlagCategory = 'buzzword' | 'metrics' | 'gap' | 'weak_verbs' | 'tech_overload' | 'length' | 'structure'
+export type RedFlagSeverity = 'critical' | 'warning' | 'info'
+
+export interface RedFlag {
+  category: RedFlagCategory
+  severity: RedFlagSeverity
+  message: string
+  details?: string
+}
+
+export interface RedFlagReport {
+  flags: RedFlag[]
+  total_count: number
+  severity_breakdown: {
+    critical: number
+    warning: number
+    info: number
+  }
+}
+
+export interface RedFlagResponse {
+  report: RedFlagReport
+}
+
+// ── Resume Evolution Tracker ──────────────────────────────────────────────────
+
+export interface VersionSnapshot {
+  analysis_id: string
+  version_number: number
+  ats_score: number
+  recruiter_score: number
+  created_at: string
+  jd_preview?: string
+}
+
+export interface EvolutionTimeline {
+  resume_id: string
+  total_versions: number
+  first_score: number
+  latest_score: number
+  improvement: number
+  versions: VersionSnapshot[]
+}
+
+export interface EvolutionResponse {
+  timeline: EvolutionTimeline
+}
+
+export interface VersionComparison {
+  version1: VersionSnapshot
+  version2: VersionSnapshot
+  score_diff: number
+  recruiter_diff: number
+  keyword_changes: {
+    added: string[]
+    removed: string[]
+  }
+}
+
+export interface CompareResponse {
+  comparison: VersionComparison
+}
+
+// ── Form State ────────────────────────────────────────────────────────────────
+
 export interface AnalyzeFormState {
   resumeId: string | null
   jobDescription: string
@@ -161,3 +240,39 @@ export type LoadingStep =
   | 'saving'
   | 'done'
   | 'error'
+
+// ── AI Resume Auto-Editor ─────────────────────────────────────────────────────
+
+export type EditType = 'add' | 'replace' | 'remove' | 'reword'
+export type EditPriority = 'high' | 'medium' | 'low'
+export type EditSection = 'experience' | 'skills' | 'education' | 'projects' | 'summary'
+
+export interface EditSuggestion {
+  section: EditSection
+  type: EditType
+  original_text: string
+  suggested_text: string
+  reason: string
+  priority: EditPriority
+  impact: string
+}
+
+export interface AutoEditSuggestionsResponse {
+  suggestions: EditSuggestion[]
+  total_count: number
+  summary: string
+}
+
+export interface GeneratedResumeFile {
+  format: 'pdf' | 'docx'
+  filename: string
+  download_url: string
+  size_bytes: number
+}
+
+export interface ApplyEditsResponse {
+  success: boolean
+  edited_text: string
+  files: GeneratedResumeFile[]
+  changes_summary: string
+}

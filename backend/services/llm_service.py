@@ -1,13 +1,22 @@
+"""
+LLM service: All AI/LLM operations using Groq API.
+Handles recruiter simulation, content generation, analysis, and suggestions.
+Uses Llama 3.3 70B via Groq for fast, cost-effective inference.
+"""
 import json
 import re
 from typing import List, Optional
 from groq import Groq
 from core.config import settings
+from core.logging_config import get_logger
+from core.throttle import groq_throttle
 from models.schemas import (
     RecruiterFeedback, RewrittenBullet, JDIntelligence,
     SkillGapRoadmap, SkillGapItem,
     StrengthBreakdown, StrengthMetric,
 )
+
+logger = get_logger("llm_service")
 ROLE_CONTEXT = {
     "sde": "Software Development Engineer (SDE) role focusing on system design, coding, and software architecture",
     "ml": "Machine Learning Engineer role focusing on ML systems, model development, and data pipelines",
@@ -66,6 +75,22 @@ MODEL = "llama-3.3-70b-versatile"
 
 def get_client() -> Groq:
     return Groq(api_key=settings.GROQ_API_KEY)
+
+
+@groq_throttle
+async def _call_groq_api(prompt: str, model: str = MODEL, temperature: float = 0.3, max_tokens: int = 1024) -> str:
+    """
+    Throttled Groq API call wrapper.
+    This function is rate-limited globally to prevent exceeding Groq's 30 RPM limit.
+    """
+    client = get_client()
+    response = client.chat.completions.create(
+        model=model,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+    return response.choices[0].message.content or ""
 
 
 def _extract_json(text: str) -> dict:
@@ -127,15 +152,8 @@ You MUST respond with ONLY a valid JSON object. No explanation, no markdown, jus
 }}"""
 
     try:
-        client = get_client()
-        response = client.chat.completions.create(
-            model=MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3,
-            max_tokens=1024,
-        )
-        raw = response.choices[0].message.content or ""
-        print(f"✅ Groq recruiter response received (persona={persona})")
+        raw = await _call_groq_api(prompt, temperature=0.3, max_tokens=1024)
+        logger.info(f"✅ Groq recruiter response received (persona={persona})")
         data = _extract_json(raw)
 
         return RecruiterFeedback(
@@ -146,7 +164,7 @@ You MUST respond with ONLY a valid JSON object. No explanation, no markdown, jus
             persona=persona,
         )
     except Exception as e:
-        print(f"❌ Groq recruiter simulation failed: {type(e).__name__}: {e}")
+        logger.error(f"Groq recruiter simulation failed: {type(e).__name__}: {e}")
         return RecruiterFeedback(
             score=5.0,
             strengths=["Resume submitted for review"],
@@ -203,14 +221,7 @@ Respond ONLY with valid JSON — no markdown, no explanation:
 }}"""
 
     try:
-        client = get_client()
-        response = client.chat.completions.create(
-            model=MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.4,
-            max_tokens=1024,
-        )
-        raw = response.choices[0].message.content or ""
+        raw = await _call_groq_api(prompt, temperature=0.4, max_tokens=1024)
         data = _extract_json(raw)
         rewrites = data.get("rewrites", [])
 
@@ -221,7 +232,7 @@ Respond ONLY with valid JSON — no markdown, no explanation:
 
         return result
     except Exception as e:
-        print(f"❌ Groq rewrite failed: {type(e).__name__}: {e}")
+        logger.error(f"Groq rewrite failed: {type(e).__name__}: {e}")
         return [RewrittenBullet(original=b, improved=b) for b in bullets]
 
 
@@ -275,23 +286,17 @@ Requirements for the cover letter:
 - Output ONLY the cover letter body text. No preamble, no markdown headers, no explanation."""
 
     try:
-        client = get_client()
-        response = client.chat.completions.create(
-            model=MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.6,
-            max_tokens=1024,
-        )
-        letter = (response.choices[0].message.content or "").strip()
+        raw = await _call_groq_api(prompt, temperature=0.6, max_tokens=1024)
+        letter = raw.strip()
         # Strip any accidental markdown code fences
         letter = re.sub(r"^```(?:\w+)?\n?", "", letter)
         letter = re.sub(r"\n?```$", "", letter).strip()
-        print(f"✅ Groq cover letter generated (tone={tone})")
+        logger.info(f"✅ Groq cover letter generated (tone={tone}, {len(letter)} chars)")
         if not letter:
             raise ValueError("Empty cover letter returned")
         return letter
     except Exception as e:
-        print(f"❌ Groq cover letter generation failed: {type(e).__name__}: {e}")
+        logger.error(f"Groq cover letter generation failed: {type(e).__name__}: {e}")
         raise
 
 
@@ -318,15 +323,8 @@ Respond with ONLY a valid JSON object. No markdown, no explanation, just raw JSO
 }}"""
 
     try:
-        client = get_client()
-        response = client.chat.completions.create(
-            model=MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.2,
-            max_tokens=1024,
-        )
-        raw = response.choices[0].message.content or ""
-        print("✅ Groq JD intelligence extracted")
+        raw = await _call_groq_api(prompt, temperature=0.2, max_tokens=1024)
+        logger.info("✅ Groq JD intelligence extracted")
         data = _extract_json(raw)
 
         return JDIntelligence(
@@ -338,7 +336,7 @@ Respond with ONLY a valid JSON object. No markdown, no explanation, just raw JSO
             education=str(data.get("education", "")).strip(),
         )
     except Exception as e:
-        print(f"❌ Groq JD intelligence extraction failed: {type(e).__name__}: {e}")
+        logger.error(f"Groq JD intelligence extraction failed: {type(e).__name__}: {e}")
         return JDIntelligence(
             role_summary="",
             required_skills=[],
@@ -372,8 +370,11 @@ async def generate_skill_gap_roadmap(
     prompt = f"""You are a senior career coach and technical mentor.
 
 Compare the candidate's resume against the target job and produce a concrete skill-gap roadmap.
-Identify which required skills the candidate already demonstrates, and which are missing or weak.
-For each missing skill, give a realistic, ordered learning path (concrete steps/resources types,
+
+CRITICAL: Only include skills in "missing_skills" that are NOT already present in the candidate's resume.
+If a skill is already demonstrated in the resume, add it to "matched_skills" instead.
+
+For each TRULY MISSING skill, give a realistic, ordered learning path (concrete steps/resources types,
 not brand names), a priority, a one-line reason it matters for THIS role, and a rough time estimate.
 {skills_hint}
 
@@ -383,14 +384,17 @@ not brand names), a priority, a one-line reason it matters for THIS role, and a 
 ## CANDIDATE RESUME:
 {resume_text[:2500]}
 
+IMPORTANT: Carefully check the resume before listing a skill as "missing". If the candidate mentions the skill,
+technology, or related experience, DO NOT include it in missing_skills - add it to matched_skills instead.
+
 Respond with ONLY a valid JSON object. No markdown, no explanation, just raw JSON:
 {{
   "summary": "<2-3 sentence honest assessment of how ready the candidate is for this role>",
   "readiness_score": <integer 0-100 representing how well-prepared the candidate currently is>,
-  "matched_skills": [<skills from the JD the candidate already clearly has>],
+  "matched_skills": [<skills from the JD the candidate ALREADY CLEARLY HAS based on their resume>],
   "missing_skills": [
     {{
-      "skill": "<skill name>",
+      "skill": "<skill name that is NOT in the resume>",
       "priority": "<high|medium|low>",
       "reason": "<why this matters for this specific role, one sentence>",
       "learning_path": [<3-4 ordered, concrete steps to learn it>],
@@ -400,15 +404,8 @@ Respond with ONLY a valid JSON object. No markdown, no explanation, just raw JSO
 }}"""
 
     try:
-        client = get_client()
-        response = client.chat.completions.create(
-            model=MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3,
-            max_tokens=1600,
-        )
-        raw = response.choices[0].message.content or ""
-        print("✅ Groq skill gap roadmap generated")
+        raw = await _call_groq_api(prompt, temperature=0.3, max_tokens=1600)
+        logger.info("✅ Groq skill gap roadmap generated")
         data = _extract_json(raw)
 
         missing_items: List[SkillGapItem] = []
@@ -439,7 +436,7 @@ Respond with ONLY a valid JSON object. No markdown, no explanation, just raw JSO
             missing_skills=missing_items,
         )
     except Exception as e:
-        print(f"❌ Groq skill gap roadmap failed: {type(e).__name__}: {e}")
+        logger.error(f"Groq skill gap roadmap failed: {type(e).__name__}: {e}")
         raise
 
 
@@ -498,15 +495,8 @@ Respond with ONLY a valid JSON object. No markdown, no explanation, just raw JSO
 }}"""
 
     try:
-        client = get_client()
-        response = client.chat.completions.create(
-            model=MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.2,
-            max_tokens=1024,
-        )
-        raw = response.choices[0].message.content or ""
-        print("✅ Groq strength breakdown generated")
+        raw = await _call_groq_api(prompt, temperature=0.2, max_tokens=1024)
+        logger.info("✅ Groq strength breakdown generated")
         data = _extract_json(raw)
 
         metrics = {}
@@ -523,5 +513,113 @@ Respond with ONLY a valid JSON object. No markdown, no explanation, just raw JSO
 
         return StrengthBreakdown(overall=overall, **metrics)
     except Exception as e:
-        print(f"❌ Groq strength breakdown failed: {type(e).__name__}: {e}")
+        logger.error(f"Groq strength breakdown failed: {type(e).__name__}: {e}")
         return StrengthBreakdown()
+
+
+# ── AI Resume Auto-Editor ────────────────────────────────────────────────────
+
+async def generate_auto_edit_suggestions(
+    resume_text: str,
+    jd_text: str,
+    ats_result: "ATSResult",
+    recruiter_feedback: "RecruiterFeedback",
+    max_suggestions: int = 10,
+) -> tuple[List["EditSuggestion"], str]:
+    """Generate AI-powered edit suggestions to improve the resume."""
+    from models.schemas import EditSuggestion
+    
+    # Build context from existing analysis
+    missing_kw = ", ".join(ats_result.missing_keywords[:15]) if ats_result.missing_keywords else "none"
+    weaknesses = "\n".join(f"- {w}" for w in recruiter_feedback.weaknesses[:5])
+    suggestions_context = "\n".join(f"- {s}" for s in recruiter_feedback.suggestions[:5])
+    
+    prompt = f"""You are an expert resume optimization consultant and ATS specialist.
+
+Analyze the resume and generate SPECIFIC, ACTIONABLE edit suggestions to improve it for this job.
+Focus on high-impact changes that will boost ATS scores and recruiter appeal.
+
+## CURRENT ANALYSIS:
+- ATS Score: {ats_result.score:.0f}%
+- Recruiter Score: {recruiter_feedback.score:.1f}/10
+- Missing Keywords: {missing_kw}
+
+## WEAKNESSES IDENTIFIED:
+{weaknesses}
+
+## IMPROVEMENT SUGGESTIONS:
+{suggestions_context}
+
+## JOB DESCRIPTION:
+{jd_text[:2500]}
+
+## CURRENT RESUME:
+{resume_text[:3000]}
+
+Generate up to {max_suggestions} concrete edit suggestions. Each suggestion should:
+- Target a specific section (experience, skills, education, projects, summary)
+- Specify the type of edit (add, replace, remove, reword)
+- Include the original text (if replacing/removing) and suggested new text
+- Explain WHY this change improves the resume
+- Indicate priority (high/medium/low) and expected impact
+
+Focus on:
+1. Adding missing keywords naturally
+2. Replacing weak bullet points with strong, quantified ones
+3. Improving action verbs and measurable outcomes
+4. Fixing structure/formatting issues
+5. Removing fluff or buzzwords
+
+Respond with ONLY a valid JSON object. No markdown, no explanation:
+{{
+  "summary": "<2-3 sentence overall assessment of what needs improvement>",
+  "suggestions": [
+    {{
+      "section": "<experience|skills|education|projects|summary>",
+      "type": "<add|replace|remove|reword>",
+      "original_text": "<exact text from resume if replacing/removing, empty if adding>",
+      "suggested_text": "<the new/improved text>",
+      "reason": "<why this change improves the resume, one sentence>",
+      "priority": "<high|medium|low>",
+      "impact": "<expected impact, e.g., '+5% ATS', 'stronger action verb', 'adds missing keyword'>"
+    }}
+  ]
+}}"""
+
+    try:
+        raw = await _call_groq_api(prompt, temperature=0.4, max_tokens=2048)
+        logger.info("✅ Groq auto-edit suggestions generated")
+        data = _extract_json(raw)
+
+        summary = str(data.get("summary", "")).strip()
+        suggestions_data = data.get("suggestions", [])[:max_suggestions]
+        
+        suggestions: List[EditSuggestion] = []
+        for item in suggestions_data:
+            if not isinstance(item, dict):
+                continue
+            
+            # Validate type and priority
+            edit_type = str(item.get("type", "replace")).lower().strip()
+            if edit_type not in ("add", "replace", "remove", "reword"):
+                edit_type = "replace"
+            
+            priority = str(item.get("priority", "medium")).lower().strip()
+            if priority not in ("high", "medium", "low"):
+                priority = "medium"
+            
+            suggestions.append(EditSuggestion(
+                section=str(item.get("section", "experience")).strip(),
+                type=edit_type,
+                original_text=str(item.get("original_text", "")).strip(),
+                suggested_text=str(item.get("suggested_text", "")).strip(),
+                reason=str(item.get("reason", "")).strip(),
+                priority=priority,
+                impact=str(item.get("impact", "")).strip(),
+            ))
+
+        return suggestions, summary
+    except Exception as e:
+        logger.error(f"Groq auto-edit suggestions failed: {type(e).__name__}: {e}")
+        # Return safe fallback
+        return [], "Unable to generate suggestions at this time. Please try again."

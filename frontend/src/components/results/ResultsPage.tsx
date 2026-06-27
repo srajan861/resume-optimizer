@@ -8,6 +8,10 @@ import CoverLetterCard from './CoverLetterCard'
 import JDIntelligenceCard from './JDIntelligenceCard'
 import SkillGapCard from './SkillGapCard'
 import StrengthBreakdownCard from './StrengthBreakdownCard'
+import RedFlagCard from './RedFlagCard'
+import EvolutionCard from './EvolutionCard'
+import SemanticMatchCard from './SemanticMatchCard'
+import AutoEditorCard from './AutoEditorCard'
 import { downloadAnalysisPDF } from '../../services/pdfExport'
 import {
   CheckCircle2, XCircle, Lightbulb, ArrowLeft,
@@ -83,6 +87,9 @@ export default function ResultsPage() {
   const [resumeText, setResumeText] = useState<string>(
     (location.state as { resumeText?: string })?.resumeText ?? ''
   )
+  const [resumeId, setResumeId] = useState<string>(
+    (location.state as { resumeId?: string })?.resumeId ?? ''
+  )
   const [loading, setLoading] = useState(!data)
   const [showAllKeywords, setShowAllKeywords] = useState(false)
   const [showAllBullets, setShowAllBullets] = useState(false)
@@ -90,8 +97,18 @@ export default function ResultsPage() {
   useEffect(() => {
     if (!data && analysisId && user) {
       setLoading(true)
-      getAnalysis(analysisId, user.id)
-        .then(setData)
+      getAnalysis(analysisId)
+        .then((result) => {
+          setData(result)
+          // Fetch resume text if available
+          if (result.resume_text) {
+            setResumeText(result.resume_text)
+          }
+          // Fetch resume_id if available
+          if (result.resume_id) {
+            setResumeId(result.resume_id)
+          }
+        })
         .catch(console.error)
         .finally(() => setLoading(false))
     }
@@ -119,6 +136,7 @@ export default function ResultsPage() {
   const { ats, recruiter, rewritten_bullets } = data
   const jdIntel = data.jd_intelligence
   const strength = data.strength_breakdown
+  const semanticMatch = data.semantic_match
   const visibleMissing = showAllKeywords ? ats.missing_keywords : ats.missing_keywords.slice(0, 12)
   const visibleBullets = showAllBullets ? rewritten_bullets : rewritten_bullets.slice(0, 3)
 
@@ -187,6 +205,12 @@ export default function ResultsPage() {
 
       {/* Resume Strength Breakdown */}
       {strength && <StrengthBreakdownCard data={strength} />}
+
+      {/* Semantic Matching */}
+      {semanticMatch && <SemanticMatchCard data={semanticMatch} />}
+
+      {/* Red Flag Detector */}
+      {resumeText && <RedFlagCard resumeText={resumeText} />}
 
       {/* Missing keywords */}
       {ats.missing_keywords.length > 0 && (
@@ -291,6 +315,12 @@ export default function ResultsPage() {
 
       {/* Skill Gap Roadmap */}
       {analysisId && <SkillGapCard analysisId={analysisId} />}
+
+      {/* AI Resume Auto-Editor */}
+      {analysisId && resumeText && <AutoEditorCard analysisId={analysisId} resumeText={resumeText} />}
+
+      {/* Resume Evolution Tracker */}
+      {resumeId && <EvolutionCard resumeId={resumeId} />}
 
       {/* Cover Letter Generator */}
       {analysisId && <CoverLetterCard analysisId={analysisId} />}

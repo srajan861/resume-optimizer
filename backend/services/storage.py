@@ -52,6 +52,32 @@ async def save_resume_record(
         raise HTTPException(status_code=500, detail=f"Failed to save resume: {str(e)}")
 
 
+async def save_resume_record_with_latex(
+    user_id: str,
+    file_url: str,
+    parsed_text: str,
+    latex_code: str,
+    filename: str,
+) -> str:
+    """Save resume with LaTeX code to database and return resume_id."""
+    supabase = get_supabase()
+    resume_id = str(uuid.uuid4())
+    
+    try:
+        supabase.table("resumes").insert({
+            "id": resume_id,
+            "user_id": user_id,
+            "file_url": file_url,
+            "parsed_text": parsed_text,
+            "latex_code": latex_code,
+            "filename": filename,
+            "created_at": datetime.utcnow().isoformat(),
+        }).execute()
+        return resume_id
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save resume: {str(e)}")
+
+
 async def get_resume_text(resume_id: str, user_id: str) -> str:
     """Fetch parsed resume text from database."""
     supabase = get_supabase()
@@ -135,13 +161,14 @@ async def save_analysis(
 
 
 async def get_analysis_by_id(analysis_id: str, user_id: str) -> Optional[dict]:
-    """Fetch full analysis details."""
+    """Fetch full analysis details including resume text, LaTeX code, and job description."""
     supabase = get_supabase()
     
     try:
+        # Fetch analysis with related data (including latex_code)
         analysis = (
             supabase.table("analyses")
-            .select("*, job_descriptions(content), resumes(parsed_text)")
+            .select("*, job_descriptions(content), resumes(parsed_text, latex_code)")
             .eq("id", analysis_id)
             .eq("user_id", user_id)
             .single()
@@ -150,6 +177,7 @@ async def get_analysis_by_id(analysis_id: str, user_id: str) -> Optional[dict]:
         if not analysis.data:
             return None
         
+        # Fetch feedback
         feedback = (
             supabase.table("feedback")
             .select("*")
@@ -158,11 +186,25 @@ async def get_analysis_by_id(analysis_id: str, user_id: str) -> Optional[dict]:
             .execute()
         )
         
+        # Extract nested data
+        jd_data = analysis.data.get("job_descriptions", {})
+        resume_data = analysis.data.get("resumes", {})
+        
+        # Build combined result
         return {
-            "analysis": analysis.data,
+            "analysis_id": analysis.data.get("id"),
+            "user_id": analysis.data.get("user_id"),
+            "resume_id": analysis.data.get("resume_id"),
+            "ats_score": analysis.data.get("ats_score", 0),
+            "recruiter_score": analysis.data.get("recruiter_score", 0),
+            "created_at": analysis.data.get("created_at", ""),
+            "resume_text": resume_data.get("parsed_text", "") if isinstance(resume_data, dict) else "",
+            "latex_code": resume_data.get("latex_code", "") if isinstance(resume_data, dict) else "",
+            "job_description": jd_data.get("content", "") if isinstance(jd_data, dict) else "",
             "feedback": feedback.data if feedback.data else {},
         }
     except Exception as e:
+        print(f"❌ Failed to fetch analysis: {type(e).__name__}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch analysis: {str(e)}")
 
 
@@ -182,6 +224,127 @@ async def get_user_history(user_id: str, limit: int = 20) -> List[dict]:
         return result.data or []
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch history: {str(e)}")
+
+
+# ── Resume Evolution ──────────────────────────────────────────────────────────
+
+async def get_resume_evolution(resume_id: str, user_id: str) -> Optional[dict]:
+    """Fetch all versions/analyses for a specific resume to track evolution."""
+    supabase = get_supabase()
+    
+    try:
+        # Get all analyses for this resume, ordered by creation time
+        result = (
+            supabase.table("analyses")
+            .select("id, ats_score, recruiter_score, created_at, job_descriptions(content)")
+            .eq("resume_id", resume_id)
+            .eq("user_id", user_id)
+            .order("created_at", desc=False)  # Ascending for version numbering
+            .execute()
+        )
+        
+        if not result.data:
+            return None
+        
+        versions = []
+        for idx, analysis in enumerate(result.data, 1):
+            jd_content = (analysis.get("job_descriptions") or {}).get("content", "")
+            jd_preview = jd_content[:100] if jd_content else "No JD"
+            
+            versions.append({
+                "analysis_id": analysis["id"],
+                "version_number": idx,
+                "ats_score": float(analysis.get("ats_score", 0)),
+                "recruiter_score": float(analysis.get("recruiter_score", 0)),
+                "created_at": analysis.get("created_at", ""),
+                "jd_preview": jd_preview,
+            })
+        
+        # Calculate improvement
+        first_score = versions[0]["ats_score"] if versions else 0
+        latest_score = versions[-1]["ats_score"] if versions else 0
+        improvement = latest_score - first_score
+        
+        return {
+            "resume_id": resume_id,
+            "total_versions": len(versions),
+            "first_score": first_score,
+            "latest_score": latest_score,
+            "improvement": round(improvement, 1),
+            "versions": versions,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch evolution: {str(e)}")
+
+
+async def compare_versions(v1_id: str, v2_id: str, user_id: str) -> Optional[dict]:
+    """Compare two analysis versions side-by-side."""
+    supabase = get_supabase()
+    
+    try:
+        # Fetch both analyses
+        v1 = (
+            supabase.table("analyses")
+            .select("id, ats_score, recruiter_score, created_at, job_descriptions(content), feedback(matched_keywords, missing_keywords)")
+            .eq("id", v1_id)
+            .eq("user_id", user_id)
+            .single()
+            .execute()
+        )
+        
+        v2 = (
+            supabase.table("analyses")
+            .select("id, ats_score, recruiter_score, created_at, job_descriptions(content), feedback(matched_keywords, missing_keywords)")
+            .eq("id", v2_id)
+            .eq("user_id", user_id)
+            .single()
+            .execute()
+        )
+        
+        if not v1.data or not v2.data:
+            return None
+        
+        # Build version snapshots
+        def build_snapshot(data, version_num):
+            jd_content = (data.get("job_descriptions") or {}).get("content", "")
+            return {
+                "analysis_id": data["id"],
+                "version_number": version_num,
+                "ats_score": float(data.get("ats_score", 0)),
+                "recruiter_score": float(data.get("recruiter_score", 0)),
+                "created_at": data.get("created_at", ""),
+                "jd_preview": jd_content[:100] if jd_content else "",
+            }
+        
+        version1 = build_snapshot(v1.data, 1)
+        version2 = build_snapshot(v2.data, 2)
+        
+        # Calculate diffs
+        score_diff = version2["ats_score"] - version1["ats_score"]
+        recruiter_diff = version2["recruiter_score"] - version1["recruiter_score"]
+        
+        # Keyword changes
+        v1_feedback = v1.data.get("feedback", {})
+        v2_feedback = v2.data.get("feedback", {})
+        
+        v1_matched = set(v1_feedback.get("matched_keywords", []) if isinstance(v1_feedback, dict) else [])
+        v2_matched = set(v2_feedback.get("matched_keywords", []) if isinstance(v2_feedback, dict) else [])
+        
+        added_keywords = list(v2_matched - v1_matched)
+        removed_keywords = list(v1_matched - v2_matched)
+        
+        return {
+            "version1": version1,
+            "version2": version2,
+            "score_diff": round(score_diff, 1),
+            "recruiter_diff": round(recruiter_diff, 1),
+            "keyword_changes": {
+                "added": added_keywords[:10],
+                "removed": removed_keywords[:10],
+            },
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to compare versions: {str(e)}")
 
 
 async def delete_analysis(analysis_id: str, user_id: str) -> bool:
