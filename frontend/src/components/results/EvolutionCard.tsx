@@ -25,7 +25,7 @@ export default function EvolutionCard({ resumeId }: Props) {
       setError(null)
 
       try {
-        const res = await getResumeEvolution(resumeId, user!.id)
+        const res = await getResumeEvolution(resumeId)
         setTimeline(res.timeline)
       } catch (err: any) {
         setError(err.message || 'Failed to load evolution data')

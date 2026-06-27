@@ -1,7 +1,9 @@
 services:
   - type: web
-    name: resumeiq-backend
+    name: resume-optimizer-backend
     env: python
+    region: oregon
+    plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
@@ -9,9 +11,17 @@ services:
         sync: false
       - key: SUPABASE_SERVICE_KEY
         sync: false
-      - key: GEMINI_API_KEY
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: SUPABASE_BUCKET
+        value: resumes
+      - key: GROQ_API_KEY
         sync: false
       - key: ALLOWED_ORIGINS
-        value: '["https://your-app.vercel.app"]'
+        value: '["https://your-frontend.vercel.app"]'
       - key: MAX_FILE_SIZE_MB
         value: "10"
+      - key: REQUIRE_EMAIL_VERIFICATION
+        value: "false"
+      - key: DEBUG
+        value: "false"

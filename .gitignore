@@ -21,6 +21,7 @@ dist/
 .env
 .env.local
 .env.production
+.env.development
 
 # OS
 .DS_Store
@@ -33,6 +34,12 @@ Thumbs.db
 
 # Logs
 *.log
+logs/
 
+# Generated files
 *.pdf
 *.docx
+
+# Docker
+.docker/
+docker-compose.override.yml
