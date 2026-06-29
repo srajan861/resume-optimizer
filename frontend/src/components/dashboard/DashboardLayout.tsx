@@ -1,10 +1,9 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
-import { LayoutDashboard, Clock, LogOut, ChevronRight, Zap } from 'lucide-react'
+import { LayoutDashboard, Clock, LogOut, ChevronRight } from 'lucide-react'
 
 const NAV = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Analyze', end: true },
-  { to: '/dashboard/editor', icon: Zap, label: 'Live Editor', end: false },
   { to: '/dashboard/history', icon: Clock, label: 'History', end: false },
 ]
 
@@ -22,7 +21,7 @@ export default function DashboardLayout() {
   return (
     <div className="min-h-screen bg-ink-900 flex">
       {/* Sidebar */}
-      <aside className="w-64 border-r border-ink-800 flex flex-col py-6 px-4 shrink-0">
+      <aside className="w-64 border-r border-ink-800 flex flex-col py-6 px-4 shrink-0 h-screen sticky top-0">
         {/* Logo */}
         <div className="px-2 mb-10">
           <span className="font-display text-xl font-bold text-acid">

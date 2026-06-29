@@ -12,7 +12,7 @@ export default function LandingPage() {
   const nav = useNavigate()
 
   return (
-    <div className="min-h-screen bg-ink-900 relative overflow-hidden">
+    <div className="min-h-screen h-screen bg-ink-900 relative overflow-hidden flex flex-col">
       {/* Grid bg */}
       <div
         className="absolute inset-0 opacity-[0.04]"
@@ -37,14 +37,14 @@ export default function LandingPage() {
       </nav>
 
       {/* Hero */}
-      <main className="relative z-10 max-w-5xl mx-auto px-8 pt-24 pb-32 text-center">
+      <main className="relative z-10 max-w-5xl mx-auto px-8 pt-12 pb-12 text-center flex-1 flex flex-col justify-center">
         <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-acid/20 bg-acid/5 text-acid text-xs font-mono mb-8 animate-fade-in">
           <span className="w-1.5 h-1.5 rounded-full bg-acid animate-pulse" />
           AI-Powered Resume Intelligence
         </div>
 
         <h1
-          className="font-display text-6xl md:text-7xl font-extrabold leading-none mb-6 animate-fade-up"
+          className="font-display text-5xl md:text-6xl font-extrabold leading-tight mb-4 animate-fade-up"
           style={{ animationDelay: '0.1s', opacity: 0 }}
         >
           Beat the ATS.
@@ -53,7 +53,7 @@ export default function LandingPage() {
         </h1>
 
         <p
-          className="text-ink-300 text-xl max-w-2xl mx-auto mb-12 leading-relaxed animate-fade-up"
+          className="text-ink-300 text-lg max-w-2xl mx-auto mb-8 leading-relaxed animate-fade-up"
           style={{ animationDelay: '0.2s', opacity: 0 }}
         >
           Upload your resume, paste any job description, and get a full
@@ -75,7 +75,7 @@ export default function LandingPage() {
 
         {/* Score preview */}
         <div
-          className="mt-20 grid grid-cols-2 md:grid-cols-4 gap-4 text-left animate-fade-up"
+          className="mt-12 grid grid-cols-2 md:grid-cols-4 gap-4 text-left animate-fade-up"
           style={{ animationDelay: '0.4s', opacity: 0 }}
         >
           {FEATURES.map(({ icon: Icon, label, desc }) => (
@@ -88,10 +88,10 @@ export default function LandingPage() {
         </div>
 
         {/* Social proof bar */}
-        <div className="mt-16 flex items-center justify-center gap-8 text-ink-500 text-sm font-mono">
+        <div className="mt-12 flex items-center justify-center gap-8 text-ink-500 text-sm font-mono">
           <span><span className="text-acid font-bold">PDF</span> + DOCX</span>
           <span className="w-px h-4 bg-ink-700" />
-          <span><span className="text-acid font-bold">Gemini</span> AI</span>
+          <span><span className="text-acid font-bold">Groq</span> AI</span>
           <span className="w-px h-4 bg-ink-700" />
           <span>Supabase <span className="text-acid font-bold">Auth</span></span>
           <span className="w-px h-4 bg-ink-700" />
