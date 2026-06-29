@@ -29,26 +29,28 @@ async def upload_resume(
     🔒 Requires authentication: JWT token in Authorization header
     Rate Limited: 20 uploads per hour per IP
     """
-    logger.info(f"Resume upload started for user {current_user[:8]}")
+    logger.info(f"✅ Authentication passed - Resume upload started for user {current_user[:8]}")
     
     try:
         # Validate filename
         filename = file.filename or "resume.pdf"
         filename = sanitize_filename(filename)
+        logger.info(f"Step 1: Filename validated: {filename}")
         
         # Validate file type
         validate_file_type(filename, ["pdf", "docx"])
+        logger.info(f"Step 2: File type validated")
         
         # Read and size-check
         file_bytes = await file.read()
         validate_file_size(file_bytes, settings.MAX_FILE_SIZE_MB)
-        
-        logger.info(f"File validated: {filename} ({len(file_bytes)} bytes)")
+        logger.info(f"Step 3: File size validated: {len(file_bytes)} bytes")
         
         # Extract text
         import io
         up = UploadFile(filename=filename, file=io.BytesIO(file_bytes))
         raw_text = await extract_text_from_file(up)
+        logger.info(f"Step 4: Text extracted: {len(raw_text)} characters")
         
         if not raw_text or len(raw_text.strip()) < 50:
             logger.warning(f"Extracted text too short: {len(raw_text)} chars")
@@ -57,22 +59,22 @@ async def upload_resume(
                 detail="Could not extract sufficient text from resume. Please ensure it's a valid PDF or DOCX file.",
             )
         
-        logger.info(f"Text extracted: {len(raw_text)} characters")
-        
         # Parse sections
         parsed = parse_resume_sections(raw_text)
+        logger.info(f"Step 5: Resume sections parsed")
         
         # Convert to LaTeX (preserves formatting)
-        logger.info("Generating LaTeX code...")
+        logger.info("Step 6: Generating LaTeX code...")
         latex_code = await resume_to_latex(raw_text, filename)
-        logger.info(f"LaTeX code ready: {len(latex_code)} characters")
+        logger.info(f"Step 7: LaTeX code ready: {len(latex_code)} characters")
         
         # Upload original file to Supabase Storage
-        logger.info("Uploading to Supabase Storage...")
+        logger.info("Step 8: Uploading to Supabase Storage...")
         file_url = await upload_resume_file(file_bytes, filename, current_user)
+        logger.info(f"Step 9: File uploaded: {file_url}")
         
         # Save to DB with LaTeX code
-        logger.info("Saving to database...")
+        logger.info("Step 10: Saving to database...")
         resume_id = await save_resume_record_with_latex(
             user_id=current_user,
             file_url=file_url,
