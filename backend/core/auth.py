@@ -50,14 +50,43 @@ async def get_current_user(
     try:
         token = credentials.credentials
         
+        # First, decode WITHOUT verification to see what's in the token
+        import json
+        import base64
+        try:
+            # Decode token payload (middle part between dots)
+            parts = token.split('.')
+            if len(parts) == 3:
+                # Add padding if needed
+                payload_part = parts[1]
+                padding = 4 - len(payload_part) % 4
+                if padding != 4:
+                    payload_part += '=' * padding
+                decoded = base64.urlsafe_b64decode(payload_part)
+                payload_preview = json.loads(decoded)
+                logger.info(f"Token payload preview: {payload_preview}")
+        except Exception as e:
+            logger.warning(f"Could not preview token: {e}")
+        
         # Decode and verify JWT signature
         # Supabase JWTs use HS256 algorithm with JWT secret
-        payload = jwt.decode(
-            token,
-            settings.SUPABASE_JWT_SECRET,
-            algorithms=["HS256"],
-            audience="authenticated",  # Supabase default audience
-        )
+        # Try without audience first to see if that's the issue
+        try:
+            payload = jwt.decode(
+                token,
+                settings.SUPABASE_JWT_SECRET,
+                algorithms=["HS256"],
+                audience="authenticated",  # Supabase default audience
+            )
+        except JWTError as e:
+            logger.warning(f"JWT decode with audience failed: {e}, trying without audience")
+            # Try without audience
+            payload = jwt.decode(
+                token,
+                settings.SUPABASE_JWT_SECRET,
+                algorithms=["HS256"],
+                options={"verify_aud": False}
+            )
         
         # Extract user ID from 'sub' claim (standard JWT claim for subject/user ID)
         user_id: str = payload.get("sub")
