@@ -27,7 +27,7 @@ export default function LandingPage() {
       <div className="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] rounded-full bg-sky-cool/5 blur-[100px]" />
 
       {/* Nav */}
-      <nav className="relative z-10 flex items-center justify-between px-8 py-6 max-w-7xl mx-auto">
+      <nav className="relative z-10 w-full flex items-center justify-between px-8 py-6 max-w-7xl mx-auto">
         <span className="font-display text-xl font-bold text-acid tracking-tight">
           Resume<span className="text-white">IQ</span>
         </span>
@@ -37,10 +37,12 @@ export default function LandingPage() {
       </nav>
 
       {/* Hero */}
-      <main className="relative z-10 max-w-5xl mx-auto px-8 pt-12 pb-12 text-center flex-1 flex flex-col justify-center">
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-acid/20 bg-acid/5 text-acid text-xs font-mono mb-8 animate-fade-in">
-          <span className="w-1.5 h-1.5 rounded-full bg-acid animate-pulse" />
-          AI-Powered Resume Intelligence
+      <main className="relative z-10 w-full max-w-5xl mx-auto px-8 pt-12 pb-12 text-center flex-1 flex flex-col justify-center">
+        <div className="flex justify-center mb-8">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-acid/20 bg-acid/5 text-acid text-xs font-mono animate-fade-in">
+            <span className="w-1.5 h-1.5 rounded-full bg-acid animate-pulse" />
+            AI-Powered Resume Intelligence
+          </div>
         </div>
 
         <h1
