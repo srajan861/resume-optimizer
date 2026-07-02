@@ -57,9 +57,10 @@ def compute_ats_score(resume_text: str, jd_text: str) -> ATSResult:
     Compute ATS compatibility score with improved matching logic.
     
     Enhanced to:
-    - Match partial words (e.g., "Python" in resume matches "Python," in JD)
+    - Better partial word matching
     - Case-insensitive matching
-    - Better keyword extraction (skills, technologies, qualifications)
+    - Prioritize meaningful technical terms
+    - More generous scoring for good matches
     """
     resume_keywords = extract_keywords(resume_text)
     jd_keywords = extract_keywords(jd_text)
@@ -73,29 +74,43 @@ def compute_ats_score(resume_text: str, jd_text: str) -> ATSResult:
             keyword_density=0.0,
         )
     
-    # Improved matching: check if JD keyword appears in resume (substring match)
+    # Improved matching with multiple strategies
     matched = set()
     missing = set()
     
     resume_text_lower = resume_text.lower()
+    resume_words = set(tokenize(resume_text))
     
     for jd_kw in jd_keywords:
-        # Check exact match first
+        found = False
+        
+        # Strategy 1: Exact match in extracted keywords
         if jd_kw in resume_keywords:
             matched.add(jd_kw)
-        # Check if JD keyword appears anywhere in resume text (substring)
+            found = True
+        
+        # Strategy 2: Substring match in resume text
         elif jd_kw in resume_text_lower:
             matched.add(jd_kw)
-        # Check if any resume keyword contains the JD keyword
-        elif any(jd_kw in resume_kw for resume_kw in resume_keywords):
+            found = True
+        
+        # Strategy 3: Any word from JD keyword exists in resume
+        elif any(word in resume_words for word in jd_kw.split()):
             matched.add(jd_kw)
-        else:
+            found = True
+        
+        # Strategy 4: Resume contains similar form (stem matching)
+        elif any(jd_kw[:max(4, len(jd_kw)-2)] in resume_kw for resume_kw in resume_keywords):
+            matched.add(jd_kw)
+            found = True
+        
+        if not found:
             missing.add(jd_kw)
     
-    # Filter to meaningful keywords only
+    # Filter to meaningful keywords only (length > 2, not pure numbers)
     meaningful_missing = sorted([
         k for k in missing
-        if len(k) > 2 and not k.replace(" ", "").replace("-", "").isdigit()
+        if len(k) > 2 and not k.replace(" ", "").replace("-", "").replace("+", "").replace("#", "").replace(".", "").isdigit()
     ])[:30]
     
     meaningful_matched = sorted([
@@ -103,16 +118,27 @@ def compute_ats_score(resume_text: str, jd_text: str) -> ATSResult:
         if len(k) > 2
     ])[:30]
     
-    # Calculate score with better logic
+    # Calculate score with improved logic
     total = len([k for k in jd_keywords if len(k) > 2])
     match_count = len([k for k in matched if len(k) > 2])
     
-    # More generous scoring: 70+ is good, 50-70 is decent
-    raw_score = (match_count / total * 100) if total > 0 else 0.0
+    if total == 0:
+        return ATSResult(
+            score=0.0,
+            matched_keywords=[],
+            missing_keywords=[],
+            total_jd_keywords=0,
+            keyword_density=0.0,
+        )
     
-    # Boost score if lots of keywords matched
-    if match_count > 15:
-        raw_score = min(raw_score * 1.15, 100)  # 15% boost for strong matches
+    # More realistic scoring: 60%+ match is good
+    raw_score = (match_count / total * 100)
+    
+    # Apply intelligent boosting
+    if match_count >= total * 0.6:  # If 60%+ keywords matched
+        raw_score = min(raw_score * 1.2, 100)  # 20% boost for strong matches
+    elif match_count >= total * 0.4:  # If 40-60% matched
+        raw_score = min(raw_score * 1.1, 100)  # 10% boost
     
     score = min(round(raw_score, 1), 100.0)
     
@@ -413,19 +439,20 @@ def detect_red_flags(resume_text: str) -> RedFlagReport:
     # 6. Resume Length Issues - More lenient for 1-page resumes
     word_count = len(tokenize(resume_text))
     
-    if word_count < 150:
+    # Don't flag if between 200-1200 words (good for 1-2 page resumes)
+    if word_count < 200:
         flags.append(RedFlag(
             category="length",
-            severity="warning",
+            severity="info",
             message=f"Resume is concise ({word_count} words)",
-            details="If this is intentionally a 1-page resume, this is fine. Otherwise, add more achievement details."
+            details="A good 1-page resume typically has 300-500 words. Consider adding more achievement details if needed."
         ))
-    elif word_count > 1500:
+    elif word_count > 1200:
         flags.append(RedFlag(
             category="length",
-            severity="warning",
-            message=f"Resume is very long ({word_count} words)",
-            details="Consider condensing to 1-2 pages. Focus on most impactful achievements from recent 5-7 years."
+            severity="info",
+            message=f"Resume is detailed ({word_count} words)",
+            details="Consider condensing to 1-2 pages if over 2 pages. Focus on most impactful achievements."
         ))
     
     # 7. No Clear Sections

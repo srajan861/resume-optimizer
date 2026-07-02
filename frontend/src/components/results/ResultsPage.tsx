@@ -14,8 +14,8 @@ import SemanticMatchCard from './SemanticMatchCard'
 import AutoEditorCard from './AutoEditorCard'
 import { downloadAnalysisPDF } from '../../services/pdfExport'
 import {
-  CheckCircle2, XCircle, Lightbulb, ArrowLeft,
-  TrendingUp, AlertTriangle, Sparkles, ChevronDown, ChevronUp,
+  Lightbulb, ArrowLeft,
+  TrendingUp, AlertTriangle, ChevronDown, ChevronUp,
   Download,
 } from 'lucide-react'
 
@@ -53,28 +53,6 @@ function ATSBar({ score }: { score: number }) {
   )
 }
 
-function BulletCard({ original, improved }: { original: string; improved: string }) {
-  const [expanded, setExpanded] = useState(false)
-  return (
-    <div className="border border-ink-700 rounded-xl overflow-hidden">
-      <div className="p-4 bg-ink-800/40">
-        <div className="flex items-start gap-2 mb-1">
-          <XCircle size={13} className="text-coral mt-0.5 shrink-0" />
-          <span className="text-xs font-mono text-ink-500 uppercase">Before</span>
-        </div>
-        <p className="text-ink-400 text-sm leading-relaxed">{original}</p>
-      </div>
-      <div className="p-4 border-t border-ink-700 bg-acid/3">
-        <div className="flex items-start gap-2 mb-1">
-          <CheckCircle2 size={13} className="text-acid mt-0.5 shrink-0" />
-          <span className="text-xs font-mono text-acid uppercase">After</span>
-        </div>
-        <p className="text-white text-sm leading-relaxed">{improved}</p>
-      </div>
-    </div>
-  )
-}
-
 export default function ResultsPage() {
   const { analysisId } = useParams<{ analysisId: string }>()
   const location = useLocation()
@@ -92,7 +70,6 @@ export default function ResultsPage() {
   )
   const [loading, setLoading] = useState(!data)
   const [showAllKeywords, setShowAllKeywords] = useState(false)
-  const [showAllBullets, setShowAllBullets] = useState(false)
 
   useEffect(() => {
     if (!data && analysisId && user) {
@@ -138,7 +115,6 @@ export default function ResultsPage() {
   const strength = data.strength_breakdown
   const semanticMatch = data.semantic_match
   const visibleMissing = showAllKeywords ? ats.missing_keywords : ats.missing_keywords.slice(0, 12)
-  const visibleBullets = showAllBullets ? rewritten_bullets : rewritten_bullets.slice(0, 3)
 
   const recruiterColor = recruiter.score >= 7 ? '#a3ff47' : recruiter.score >= 4.5 ? '#47c8ff' : '#ff6b47'
 
@@ -288,30 +264,6 @@ export default function ResultsPage() {
           ))}
         </ol>
       </div>
-
-      {/* Rewritten bullets */}
-      {rewritten_bullets.length > 0 && (
-        <div className="animate-fade-up" style={{ animationDelay: '0.25s' }}>
-          <h2 className="font-display font-bold text-white mb-4 flex items-center gap-2">
-            <Sparkles size={16} className="text-acid" />
-            Rewritten Bullet Points
-          </h2>
-          <div className="space-y-3">
-            {visibleBullets.map((b, i) => (
-              <BulletCard key={i} original={b.original} improved={b.improved} />
-            ))}
-          </div>
-          {rewritten_bullets.length > 3 && (
-            <button
-              onClick={() => setShowAllBullets(!showAllBullets)}
-              className="mt-3 text-xs text-ink-500 hover:text-acid flex items-center gap-1 font-mono transition-colors"
-            >
-              {showAllBullets ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-              {showAllBullets ? 'Show fewer' : `Show all ${rewritten_bullets.length} rewrites`}
-            </button>
-          )}
-        </div>
-      )}
 
       {/* Skill Gap Roadmap */}
       {analysisId && <SkillGapCard analysisId={analysisId} />}

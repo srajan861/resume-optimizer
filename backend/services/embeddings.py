@@ -122,37 +122,66 @@ Return ONLY a JSON array of 20 semantic features with weights 0-1:
 async def compute_semantic_similarity(resume_text: str, jd_text: str) -> Tuple[float, dict]:
     """
     Compute semantic similarity between resume and job description.
+    Uses TF-IDF and keyword overlap for more reliable scoring.
     
     Returns:
         - similarity score (0-100)
         - metadata dict with additional info
     """
     logger.info("Computing semantic similarity between resume and JD")
+    
     try:
-        # Generate embeddings for both texts
-        resume_embedding = await generate_embedding(resume_text)
-        jd_embedding = await generate_embedding(jd_text)
+        from services.ats_engine import tokenize, extract_keywords
         
-        # Compute cosine similarity
-        raw_similarity = compute_cosine_similarity(resume_embedding, jd_embedding)
+        # Extract keywords from both texts
+        resume_keywords = extract_keywords(resume_text, min_len=3)
+        jd_keywords = extract_keywords(jd_text, min_len=3)
+        
+        if not jd_keywords:
+            return 50.0, {
+                "method": "keyword_overlap",
+                "interpretation": "Unable to extract keywords from job description",
+            }
+        
+        # Calculate overlap-based similarity
+        intersection = resume_keywords & jd_keywords
+        union = resume_keywords | jd_keywords
+        
+        # Jaccard similarity
+        jaccard = len(intersection) / len(union) if union else 0.0
+        
+        # Also check how many JD keywords are in resume (precision)
+        resume_coverage = len(intersection) / len(jd_keywords) if jd_keywords else 0.0
+        
+        # Combine both metrics for final score
+        # Weight coverage more heavily (does resume have what JD wants?)
+        raw_similarity = (resume_coverage * 0.7) + (jaccard * 0.3)
+        
+        # Apply intelligent boosting for good matches
+        if raw_similarity >= 0.5:  # If 50%+ similarity
+            raw_similarity = min(raw_similarity * 1.15, 1.0)  # 15% boost
+        elif raw_similarity >= 0.35:  # If 35-50%
+            raw_similarity = min(raw_similarity * 1.1, 1.0)  # 10% boost
         
         # Scale to 0-100
-        score = round(raw_similarity * 100, 1)
+        score = min(round(raw_similarity * 100, 1), 100.0)
         
         metadata = {
-            "embedding_dimensions": len(resume_embedding),
-            "raw_similarity": round(raw_similarity, 4),
+            "method": "keyword_overlap_enhanced",
+            "jaccard_similarity": round(jaccard, 3),
+            "jd_coverage": round(resume_coverage, 3),
+            "shared_keywords": len(intersection),
             "interpretation": _interpret_score(score),
         }
         
         logger.info(f"✅ Semantic similarity computed: {score}% (interpretation: {metadata['interpretation'][:50]}...)")
         return score, metadata
+        
     except Exception as e:
         logger.error(f"Semantic similarity computation failed: {type(e).__name__}: {e}")
         # Return fallback score
         return 50.0, {
-            "embedding_dimensions": 128,
-            "raw_similarity": 0.5,
+            "method": "fallback",
             "interpretation": "Unable to compute semantic similarity at this time",
         }
 
